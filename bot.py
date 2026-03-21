@@ -4385,22 +4385,34 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         cat_col = "bot_category_id" if is_bot else "category_id"
         current_style = quiz_data.get('quiz_style', 'السرعة ⚡') 
 
-        # 1. جلب الأسئلة أولاً من سوبابيس
-        res_q = supabase.table(table).select("*, categories(name)" if not is_bot else "*").in_(cat_col, cat_ids).execute()
+        # 1. جلب الأسئلة مع ربط الجداول (الـ Join مهم جداً هنا لاسم القسم)
+        # أضفت شرطاً لجلب اسم القسم بشكل صحيح حسب نوع الجدول
+        query = supabase.table(table).select("*, categories(name)" if not is_bot else "*")
+        res_q = query.in_(cat_col, cat_ids).execute()
         
         if not res_q.data:
             logging.error(f"⚠️ لم يتم العثور على أسئلة للقسم المحدد: {cat_ids}")
             return
 
-        # 2. تجهيز القائمة العشوائية واختيار العدد المطلوب
+        # 2. تجهيز القائمة العشوائية
         pool = res_q.data
         random.shuffle(pool)
         count = int(quiz_data.get('questions_count', 10))
         selected_questions = pool[:count] 
         total_q = len(selected_questions)
 
-        # 3. الآن نعرّف القسم (main_cat) بعد أن تأكدنا من وجود أسئلة مختارة
-        main_cat = selected_questions[0].get('categories', {}).get('name', 'عام') if selected_questions and not is_bot else "بوت"
+        # 3. 🔥 إصلاح استخراج اسم القسم (منطق خارق مشابه للمسابقة الخاصة) 🔥
+        sample_q = selected_questions[0]
+        if is_bot:
+            # في أسئلة البوت غالباً الاسم في حقل category أو bot_category
+            main_cat = sample_q.get('category') or sample_q.get('bot_category') or "قسم البوت"
+        else:
+            # هنا التعديل الجوهري: الوصول الآمن لقاموس الـ Join
+            cat_data = sample_q.get('categories')
+            if isinstance(cat_data, dict):
+                main_cat = cat_data.get('name', 'عام')
+            else:
+                main_cat = "أقسام عامة"
 
         # تجهيز مخازن البيانات
         group_scores = {cid: {} for cid in all_chats}
@@ -4411,6 +4423,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         try:
             creator_id = quiz_data.get('owner_id') or quiz_data.get('created_by') or 0
             
+            # تأكدنا الآن أن main_cat لن تكون None أبداً ولن تسبب KeyError
             quiz_entry = supabase.table("active_quizzes").insert({
                 "quiz_name": f"إذاعة {owner_name}",
                 "created_by": creator_id,
@@ -4418,7 +4431,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 "is_active": True,
                 "participants_ids": [group_names_map.get(str(c), str(c)) for c in chats_to_broadcast],
                 "total_questions": total_q,
-                "category_name": main_cat,
+                "category_name": main_cat, # القيمة المحمية
                 "quiz_type": "public",
             }).execute()
 
