@@ -4381,6 +4381,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         is_bot = quiz_data.get("is_bot_quiz", False)
         table = "bot_questions" if is_bot else "questions"
         cat_col = "bot_category_id" if is_bot else "category_id"
+        main_cat = selected_questions[0].get('categories', {}).get('name', 'عام') if selected_questions else "عام"
         current_style = quiz_data.get('quiz_style', 'السرعة ⚡') 
         # جلب الأسئلة من سوبابيس
         res_q = supabase.table(table).select("*, categories(name)" if not is_bot else "*").in_(cat_col, cat_ids).execute()
