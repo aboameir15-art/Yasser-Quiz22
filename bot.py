@@ -4404,14 +4404,13 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             
             quiz_entry = supabase.table("active_quizzes").insert({
                 "quiz_name": f"إذاعة {owner_name}",
-                "created_by": creator_id,  # تأكدنا أن القيمة ليست NULL
+                "created_by": creator_id,
                 "is_global": True,
                 "is_active": True,
-                "participants_ids": [group_names_map.get(c, str(c)) for c in chats_to_broadcast], # 👈 استخدام الخريطة هنا
+                "participants_ids": [group_names_map.get(str(c), str(c)) for c in chats_to_broadcast],
                 "total_questions": total_q,
-                "quiz_type": public,
+                "quiz_type": "public",  # 👈 أضف علامات التنصيص هنا
                 "category_name": selected_questions[0].get('categories', {}).get('name', 'عام') if not is_bot else "بوت"
-                
             }).execute()
 
             if quiz_entry.data:
