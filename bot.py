@@ -4409,8 +4409,8 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 "is_active": True,
                 "participants_ids": [group_names_map.get(str(c), str(c)) for c in chats_to_broadcast],
                 "total_questions": total_q,
+                "category_name": main_cat,
                 "quiz_type": "public",  # 👈 أضف علامات التنصيص هنا
-                "category_name": selected_questions[0].get('categories', {}).get('name', 'عام') if not is_bot else "بوت"
             }).execute()
 
             if quiz_entry.data:
