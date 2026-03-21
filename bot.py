@@ -4858,7 +4858,7 @@ async def unified_answer_checker(m: types.Message):
                                 "user_name": m.from_user.first_name,
                                 "answer_text": user_text,
                                 "is_correct": True,
-                                "points_earned": 10,
+                                "points_earned": 2,
                                 "speed_rank": len(quiz.get('winners', [])) + 1
                             }).execute()
                         except Exception as e: 
@@ -4907,7 +4907,7 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
         "user_id": user_id,
         "user_name": user_name,
         "is_correct": is_correct,
-        "points_earned": 10 if is_correct else 0,    # نظام النقاط الافتراضي
+        "points_earned": 1 if is_correct else 0,    # نظام النقاط الافتراضي
         "question_no": poll_info.get('current_num'), # ترتيب السؤال في المسابقة
         "total_quiz_questions": poll_info.get('total_num'),
         "answer_text": poll_info.get('correct_text') if is_correct else "خاطئة",
