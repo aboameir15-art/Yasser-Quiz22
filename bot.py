@@ -4513,7 +4513,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             while time.time() - start_wait < t_limit:
                 # التحقق هل لا يزال هناك أي مجموعة نشطة؟
                 still_active = any(active_quizzes.get(c, {}).get('active', False) for c in chats_to_broadcast)
-                 if not still_active:
+                if not still_active:
                     logging.info("⚡ الرادار أعطى إشارة إغلاق.. الانتقال للنتائج فوراً.")
                     break
                 
