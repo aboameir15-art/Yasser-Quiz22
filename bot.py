@@ -4371,8 +4371,10 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         # --- [ ج ] جلب وتجهيز الأسئلة من المخزن ---
         raw_cats = quiz_data.get('cats', [])
         if isinstance(raw_cats, str):
-            try: cat_ids_list = json.loads(raw_cats)
-            except: cat_ids_list = raw_cats.replace('[','').replace(']','').replace('"','').split(',')
+            try: 
+                cat_ids_list = json.loads(raw_cats)
+            except: 
+                cat_ids_list = raw_cats.replace('[','').replace(']','').replace('"','').split(',')
         else: 
             cat_ids_list = raw_cats
             
@@ -4381,26 +4383,32 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         is_bot = quiz_data.get("is_bot_quiz", False)
         table = "bot_questions" if is_bot else "questions"
         cat_col = "bot_category_id" if is_bot else "category_id"
-        main_cat = selected_questions[0].get('categories', {}).get('name', 'عام') if selected_questions else "عام"
         current_style = quiz_data.get('quiz_style', 'السرعة ⚡') 
-        # جلب الأسئلة من سوبابيس
+
+        # 1. جلب الأسئلة أولاً من سوبابيس
         res_q = supabase.table(table).select("*, categories(name)" if not is_bot else "*").in_(cat_col, cat_ids).execute()
         
         if not res_q.data:
             logging.error(f"⚠️ لم يتم العثور على أسئلة للقسم المحدد: {cat_ids}")
             return
 
+        # 2. تجهيز القائمة العشوائية واختيار العدد المطلوب
         pool = res_q.data
         random.shuffle(pool)
         count = int(quiz_data.get('questions_count', 10))
         selected_questions = pool[:count] 
         total_q = len(selected_questions)
+
+        # 3. الآن نعرّف القسم (main_cat) بعد أن تأكدنا من وجود أسئلة مختارة
+        main_cat = selected_questions[0].get('categories', {}).get('name', 'عام') if selected_questions and not is_bot else "بوت"
+
+        # تجهيز مخازن البيانات
         group_scores = {cid: {} for cid in all_chats}
         messages_to_delete = {cid: [] for cid in all_chats}
         results_to_delete = {cid: [] for cid in all_chats}
+
         # 🟢 [ الخطوة 1: المشرف ] إنشاء سجل المسابقة المركزي
         try:
-            # نتحقق من وجود owner_id، وإذا لم يوجد نستخدم 0 أو رقم ثابت لتجنب الـ NULL
             creator_id = quiz_data.get('owner_id') or quiz_data.get('created_by') or 0
             
             quiz_entry = supabase.table("active_quizzes").insert({
@@ -4411,13 +4419,13 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 "participants_ids": [group_names_map.get(str(c), str(c)) for c in chats_to_broadcast],
                 "total_questions": total_q,
                 "category_name": main_cat,
-                "quiz_type": "public",  # 👈 أضف علامات التنصيص هنا
+                "quiz_type": "public",
             }).execute()
 
             if quiz_entry.data:
                 current_quiz_db_id = quiz_entry.data[0]['id']
                 logging.info(f"✅ سجل active_quizzes جاهز ID: {current_quiz_db_id}")
-
+    
                 # 🔥 [ الخطوة 2: المسجل ] الربط بجدول المشاركين (الحبل السري)
                 # تسجيل من انضم فعلياً في جدول quiz_participants لربط المجموعات بالـ ID
                 participants_records = [
