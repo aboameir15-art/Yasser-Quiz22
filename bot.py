@@ -4400,17 +4400,20 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         count = int(quiz_data.get('questions_count', 10))
         selected_questions = pool[:count] 
         total_q = len(selected_questions)
-
         # 3. 🔥 إصلاح استخراج اسم القسم (منطق خارق مشابه للمسابقة الخاصة) 🔥
-        sample_q = questions[0]
+        # 1. نستخدم الاسم "الحي" في الذاكرة: selected_questions
+        sample_q = selected_questions[0]         
+        # 2. نحدد الـ engine_type بناءً على نوع الأسئلة (بوت أم مستخدم)
+        engine_type = "bot" if is_bot else "user"
+
         if engine_type == "bot":
             main_cat = sample_q.get('category') or "عام"
         elif engine_type == "user":
             main_cat = sample_q['categories']['name'] if (sample_q.get('categories') and isinstance(sample_q['categories'], dict)) else "أقسام الأعضاء"
         else:
             main_cat = "قسم عام"
-
-        # تجهيز مخازن البيانات
+            
+        
         group_scores = {cid: {} for cid in all_chats}
         messages_to_delete = {cid: [] for cid in all_chats}
         results_to_delete = {cid: [] for cid in all_chats}
