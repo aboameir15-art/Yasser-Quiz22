@@ -4402,17 +4402,13 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         total_q = len(selected_questions)
 
         # 3. 🔥 إصلاح استخراج اسم القسم (منطق خارق مشابه للمسابقة الخاصة) 🔥
-        sample_q = selected_questions[0]
-        if is_bot:
-            # في أسئلة البوت غالباً الاسم في حقل category أو bot_category
-            main_cat = sample_q.get('category') or sample_q.get('bot_category') or "قسم البوت"
+        sample_q = questions[0]
+        if engine_type == "bot":
+            main_cat = sample_q.get('category') or "عام"
+        elif engine_type == "user":
+            main_cat = sample_q['categories']['name'] if (sample_q.get('categories') and isinstance(sample_q['categories'], dict)) else "أقسام الأعضاء"
         else:
-            # هنا التعديل الجوهري: الوصول الآمن لقاموس الـ Join
-            cat_data = sample_q.get('categories')
-            if isinstance(cat_data, dict):
-                main_cat = cat_data.get('name', 'عام')
-            else:
-                main_cat = "أقسام عامة"
+            main_cat = "قسم عام"
 
         # تجهيز مخازن البيانات
         group_scores = {cid: {} for cid in all_chats}
