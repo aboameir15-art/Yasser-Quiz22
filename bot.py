@@ -4313,8 +4313,8 @@ async def run_countdown(chat_id):
         except: pass
     except: pass
 
+
 # 3️⃣ المحرك الرئيسي الموحد (نسخة ياسر المطورة 2026)
-# ✅ السطر الجديد (أضف المتغير الرابع):
 async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_db_id=None):
     # 1. [ المندوب سلم القائمة ]
     input_ids = chat_ids if isinstance(chat_ids, list) else [chat_ids]
@@ -4449,12 +4449,14 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 except Exception as up_err:
                     logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {i+1}: {up_err}")
 
-            # تحديث الرادار المحلي (الرام) لكل مجموعة مشاركة
+            # السطر 123: تحديث الرادار المحلي (الرام) لكل مجموعة مشاركة
             for cid in chats_to_broadcast:
                 active_quizzes[cid] = {
                     "active": True,
                     "ans": ans,
                     "winners": [],
+                    "voted_users": [], # 👈 (جديد) لتعقب المصوتين في نظام الاختيارات
+                    "quiz_style": current_style, # 👈 (جديد) لتحديد نوع التعامل مع الإجابات
                     "mode": quiz_data.get('mode', 'السرعة ⚡'),
                     "db_quiz_id": current_quiz_db_id, 
                     "current_index": i + 1,
@@ -4468,39 +4470,71 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 ans_str = str(ans).strip()
                 normal_hint_str = f"مكونة من ({len(ans_str.split())}) كلمات، تبدأ بـ ( {ans_str[0]} )"
                 
-            # 4️⃣ [ بث السؤال للعالم ]
-            # إرسال السؤال فقط للمجموعات المسجلة رسمياً
-            send_tasks = [
-                send_quiz_question(cid, q, i+1, total_q, {
-                    'owner_name': owner_name,
-                    'mode': quiz_data.get('mode', 'السرعة ⚡'),
-                    'time_limit': int(quiz_data.get('time_limit', 15)),
-                    'cat_name': cat_name,
-                    'quiz_db_id': current_quiz_db_id,
-                    'is_public': True
-                }) for cid in chats_to_broadcast
-            ]
-            # تنفيذ البث الجماعي (16 مسافة)
+            # 4️⃣ [ بث السؤال للعالم عبر المايسترو ]
+            send_tasks = []
+            for cid in chats_to_broadcast:
+                # نستخدم المايسترو بدلاً من send_quiz_question
+                # المايسترو سيعرف تلقائياً هل يرسل Poll أو رسالة نصية بناءً على current_style
+                task = send_quiz_master(
+                    chat_id=cid, 
+                    q_data=q, 
+                    current_num=i + 1, 
+                    total_num=total_q, 
+                    settings={
+                        'owner_name': owner_name,
+                        'mode': quiz_data.get('mode', 'السرعة ⚡'),
+                        'time_limit': int(quiz_data.get('time_limit', 15)),
+                        'cat_name': cat_name,
+                        'quiz_db_id': current_quiz_db_id,
+                        'quiz_style': current_style, # 👈 المتغير الذي جلبناه في بداية المحرك
+                        'is_public': True
+                    },
+                    all_questions_list=selected_questions # ضروري لتوليد الخيارات في الـ Poll
+                )
+                send_tasks.append(task)
+
+            # تنفيذ البث الجماعي (إرسال متوازي لسرعة فائقة)
             q_msgs = await asyncio.gather(*send_tasks, return_exceptions=True)
 
+            # تسجيل معرفات الرسائل للتحكم بها لاحقاً (مسح أو إغلاق)
             for idx, m in enumerate(q_msgs):
+                cid = chats_to_broadcast[idx]
                 if isinstance(m, types.Message):
-                    messages_to_delete[all_chats[idx]].append(m.message_id)
+                    messages_to_delete[cid].append(m.message_id)
                     
-            # 5️⃣ محرك الانتظار الذكي (النسخة الصاروخية 🚀)
+                    # 👈 إضافة مهمة: إذا كان السؤال Poll، نحفظ معرفه لإغلاقه برمجياً
+                    if hasattr(m, 'poll') and m.poll is not None:
+                        active_quizzes[cid]['last_poll_id'] = m.message_id
+
+            # 5️⃣ [ محرك الانتظار الموحد ]
             t_limit = int(quiz_data.get('time_limit', 15))
             start_wait = time.time()
-
+            
+            # حلقة مراقبة ذكية (تنتظر حتى انتهاء الوقت أو إجابة الجميع)
             while time.time() - start_wait < t_limit:
-                # فحص هل تم الحسم من أي مجموعة؟
-                still_active = any(active_quizzes.get(c, {}).get('active', False) for c in all_chats)
-                
-                if not still_active:
+                # التحقق هل لا يزال هناك أي مجموعة نشطة؟
+                still_active = any(active_quizzes.get(c, {}).get('active', False) for c in chats_to_broadcast)
+                 if not still_active:
                     logging.info("⚡ الرادار أعطى إشارة إغلاق.. الانتقال للنتائج فوراً.")
                     break
                 
                 # تقليل النوم لـ 0.05 لضمان حساسية عالية جداً
-                await asyncio.sleep(0.08)
+                await asyncio.sleep(0.1)
+
+            # 🛑 [ الحركة القاضية - إغلاق الاستطلاعات ]
+            # إذا كان النمط "اختيارات"، نغلق الـ Poll في كل المجموعات فوراً عند انتهاء الوقت
+            if current_style == 'اختيارات 📊':
+                close_tasks = []
+                for cid in chats_to_broadcast:
+                    p_id = active_quizzes.get(cid, {}).get('last_poll_id')
+                    if p_id:
+                        # إيقاف الاستطلاع يمنع أي تصويت إضافي ويظهر النتيجة النهائية
+                        close_tasks.append(bot.stop_poll(cid, p_id))
+                
+                if close_tasks:
+                    await asyncio.gather(*close_tasks, return_exceptions=True)
+                    
+
             # 6️⃣ إغلاق السؤال وتحديث النقاط (داخل حلقة الأسئلة)
             res_tasks = []
             
@@ -4634,7 +4668,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
     finally:
         # 🔓 فتح القفل للسماح ببدء إذاعة جديدة
         for cid in all_chats: active_broadcasts.discard(cid)
-# =======================================
+# ======================================
 # =======================================
 # --- [ بداية الدالة من العمود 0 لضمان عدم وجود SyntaxError ] ---
 import re
@@ -4916,6 +4950,17 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
 
     # 5. 🚀 استدعاء دالة التسجيل في سوبابيس
     await record_poll_answer_in_db(answer_data)
+
+    # 🔥 [ السطر الجديد: ربط التصويت بالرادار المحلي ]
+    # هذا الجزء يخبر المحرك العالمي: "فلان جاوب صح في الجروب الفلاني، ضيفه للقائمة"
+    cid = poll_info.get('chat_id')
+    if is_correct and cid in active_quizzes:
+        # إضافة الفائز للقائمة التي سيقرأها المحرك عند انتهاء الـ 15 ثانية
+        active_quizzes[cid]['winners'].append({
+            'id': user_id,
+            'name': user_name,
+            'time': response_time
+        })
 
     # 6. [قرح جو]: طباعة سريعة للرصد
     status = "✅ كفو أصاب" if is_correct else "❌ أخطأ"
