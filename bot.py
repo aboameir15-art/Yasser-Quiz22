@@ -4584,7 +4584,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     
                     if uid not in group_scores[cid]:
                         group_scores[cid][uid] = {"name": uname, "points": 0}
-                    group_scores[cid][uid]['points'] += 10
+                    group_scores[cid][uid]['points'] += 2855
                     
                     # 🔥 [ الربط العالمي للمجموعات ] 🔥
                     # استدعاء الدالة لتحديث جدول المجموعات في سوبابيس
