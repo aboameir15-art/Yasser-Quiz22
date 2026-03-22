@@ -4520,164 +4520,129 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     if hasattr(m, 'poll') and m.poll is not None:
                         active_quizzes[cid]['last_poll_id'] = m.message_id
 
-
-            # 5️⃣ [ محرك الانتظار الموحد ] - الفراغ 12
-            # جلب الوقت المحدد للسؤال من الإعدادات (quiz_data)
-            try:
-                # نتحقق من وجود المفتاح 'time_limit' ونحوله لرقيم
-                t_limit = int(quiz_data.get('time_limit', 15))
-            except (ValueError, TypeError, AttributeError):
-                # إذا حدث خطأ في القيمة أو النوع، نعتمد 15 ثانية كافتراضي
-                t_limit = 15
-            
+            # 5️⃣ [ محرك الانتظار الموحد ]
+            t_limit = int(quiz_data.get('time_limit', 15))
             start_wait = time.time()
             
-            # حلقة الانتظار الذكية بناءً على إعدادات المسابقة
-            while (time.time() - start_wait) < t_limit:
-                # رادار التحقق: هل لا تزال هناك مجموعات لم تنتهِ؟
+            # حلقة مراقبة ذكية (تنتظر حتى انتهاء الوقت أو إجابة الجميع)
+            while time.time() - start_wait < t_limit:
+                # التحقق هل لا يزال هناك أي مجموعة نشطة؟
                 still_active = any(active_quizzes.get(c, {}).get('active', False) for c in chats_to_broadcast)
                 if not still_active:
-                    logging.info("⚡ الجميع أجابوا.. اختصار الوقت والذهاب للنتائج.")
+                    logging.info("⚡ الرادار أعطى إشارة إغلاق.. الانتقال للنتائج فوراً.")
                     break
+                
+                # تقليل النوم لـ 0.05 لضمان حساسية عالية جداً
                 await asyncio.sleep(0.1)
 
-            # 🛑 [ إغلاق الاستطلاعات ]
+            # 🛑 [ الحركة القاضية - إغلاق الاستطلاعات ]
+            # إذا كان النمط "اختيارات"، نغلق الـ Poll في كل المجموعات فوراً عند انتهاء الوقت
             if current_style == 'اختيارات 📊':
-                close_tasks = [
-                    bot.stop_poll(cid, active_quizzes[cid]['last_poll_id']) 
-                    for cid in chats_to_broadcast 
-                    if active_quizzes.get(cid, {}).get('last_poll_id')
-                ]
+                close_tasks = []
+                for cid in chats_to_broadcast:
+                    p_id = active_quizzes.get(cid, {}).get('last_poll_id')
+                    if p_id:
+                        # إيقاف الاستطلاع يمنع أي تصويت إضافي ويظهر النتيجة النهائية
+                        close_tasks.append(bot.stop_poll(cid, p_id))
+                
                 if close_tasks:
                     await asyncio.gather(*close_tasks, return_exceptions=True)
+                    
 
-            # 6️⃣ جلب الأبطال من "سجل الإجابات" (answers_log)
+            # 6️⃣ إغلاق السؤال وتحديث النقاط (داخل حلقة الأسئلة)
             res_tasks = []
-            current_db_quiz_id = quiz_data.get('id')
-            global_winners = []
             
-            try:
-                # جلب أسرع 10 فائزين من الجدول الرقمي لهذا السؤال تحديداً
-                query_res = supabase.table("answers_log") \
-                    .select("user_name, points_earned, user_id, chat_id, response_time") \
-                    .eq("quiz_id", current_db_quiz_id) \
-                    .eq("question_no", i + 1) \
-                    .eq("is_correct", True) \
-                    .order("response_time", desc=False) \
-                    .limit(10) \
-                    .execute()
+            # 🟢 [إضافة] نجمع كل الفائزين من كل المجموعات في قائمة واحدة "عالمية"
+            global_winners = []
+            for cid in all_chats:
+                global_winners.extend(active_quizzes.get(cid, {}).get('winners', []))
+            
+            # ترتيب الفائزين عالمياً حسب السرعة (الأسرع هو الأول)
+            global_winners = sorted(global_winners, key=lambda x: x.get('time', 0))
 
-                if query_res.data:
-                    for row in query_res.data:
-                        # جلب النقاط من السجل (التي تم حسابها في المستشعر)
-                        pts = row.get('points_earned', 0) or 0
-                        
-                        # توزيع الألقاب بناءً على نقاط السرعة المخزنة
-                        if pts >= 20: s_title = "⚡ (خارق الصمت)"
-                        elif pts >= 15: s_title = "🚀 (القناص)"
-                        elif pts >= 12: s_title = "🏹 (المتمكن)"
-                        else: s_title = "🧠 (الذكي)"
-                        
-                        global_winners.append({
-                            'id': row['user_id'],
-                            'name': row['user_name'],
-                            'pts': pts,
-                            'title': s_title,
-                            'time': row.get('response_time', 0),
-                            'chat_id': row['chat_id']
-                        })
-            except Exception as e:
-                logging.error(f"❌ خطأ جلب سجل الإجابات للجولة {i+1}: {e}")
-
-            # تحديث النقاط المحلية لكل مجموعة من السجل (لضمان الدقة)
             for cid in all_chats:
                 if cid in active_quizzes:
                     active_quizzes[cid]['active'] = False
                 
-                # جلب فائزي هذه المجموعة فقط من السجل لتحديث القاموس المحلي
-                local_winners = [w for w in global_winners if w.get('chat_id') == cid]
-                
+                # تحديث نقاط الأعضاء المحليين في هذه المجموعة
+                local_winners = active_quizzes.get(cid, {}).get('winners', [])
                 for w in local_winners:
                     uid = w['id']
-                    uname = w['name']
-                    pts = w['pts']
+                    uname = w['name'] # اسم العضو الفائز
                     
                     if uid not in group_scores[cid]:
                         group_scores[cid][uid] = {"name": uname, "points": 0}
-                    group_scores[cid][uid]['points'] += pts
-
-                # 🔵 إرسال قالب النتائج (الموحد) لكل مجموعة
+                    group_scores[cid][uid]['points'] += 10
+                    
+                    # 🔥 [ الربط العالمي للمجموعات ] 🔥
+                    # استدعاء الدالة لتحديث جدول المجموعات في سوبابيس
+                    try:
+                        # نجلب اسم المجموعة من القاموس الذي عرفته سابقاً
+                        gname = group_names_map.get(cid, "مجموعة مجهولة")
+                        
+                        await update_group_stats(
+                            group_id=cid,      # آيدي المجموعة
+                            group_name=gname,   # اسم المجموعة
+                            user_id=uid,       # آيدي العضو الفائز
+                            user_name=uname,    # اسم العضو الفائز
+                            points=10          # النقاط المضافة للمجموعة
+                        )
+                    except Exception as e:
+                        logging.error(f"⚠️ خطأ في تحديث إحصائيات المجموعة: {e}")
+              
+                # 🔵 [التعديل العالمي الشامل]
                 res_tasks.append(send_creative_results(
                     chat_id=cid, 
                     correct_ans=ans, 
-                    winners=global_winners,      # قائمة الأبطال من السجل (يراها الجميع)
-                    group_scores=group_scores,   # ترتيب اللاعبين المحليين
-                    is_public=True,
+                    winners=global_winners,      # بطل الجولة (يراه الجميع)
+                    group_scores=group_scores,   # ترتيب كل اللاعبين والمجموعات (بدون حذف)
+                    is_public=True,              # تفعيل وضع الإذاعة العامة
                     mode=quiz_data.get('mode', 'السرعة ⚡'),
-                    group_names=group_names_map
+                    group_names=group_names_map  # قاموس الأسماء الذي عرفناه في بداية الدالة
                 ))
             
-            # صيد معرفات الرسائل لحذفها لاحقاً
+            # 🔥 استبدل السطر القديم بهذا البلوك لصيد مُعرفات رسائل الإجابة
             res_msgs = await asyncio.gather(*res_tasks, return_exceptions=True)
             for idx, rm in enumerate(res_msgs):
                 if isinstance(rm, types.Message):
                     results_to_delete[all_chats[idx]].append(rm.message_id)
             
+            # (اختياري) عداد تنازلي هنا للسؤال التالي
             # 7️⃣ العداد التنازلي للسؤال القادم
             if i < total_q - 1:
                 for cid in all_chats:
                     if cid in active_quizzes:
-                        active_quizzes[cid]['winners'] = [] # تصفير القائمة المؤقتة للجولة القادمة
+                        active_quizzes[cid]['winners'] = []
                 count_tasks = [run_countdown(cid) for cid in all_chats]
                 await asyncio.gather(*count_tasks, return_exceptions=True)
             else:
                 await asyncio.sleep(2)
-          
-        # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
-        # نجلب آيدي المسابقة الحالية لضمان جلب بياناتها فقط
-        current_db_quiz_id = quiz_data.get('id')
 
+        
+        # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
         for cid in all_chats:
             try: 
-                # أ. جلب كافة الإجابات الصحيحة لهذه المجموعة من السجل
-                # نستخدم .select جلب (user_id, user_name, points_earned)
-                final_query = supabase.table("answers_log") \
-                    .select("user_id, user_name, points_earned") \
-                    .eq("quiz_id", current_db_quiz_id) \
-                    .eq("chat_id", cid) \
-                    .eq("is_correct", True) \
-                    .execute()
-
-                # ب. تجميع النقاط (Aggregating) من السجل
-                # بما أن كل سؤال له سطر، سنقوم بجمع نقاط كل مستخدم
-                db_scores = {}
-                if final_query.data:
-                    for row in final_query.data:
-                        uid = row['user_id']
-                        uname = row['user_name']
-                        pts = row['points_earned'] or 0
-                        
-                        if uid not in db_scores:
-                            db_scores[uid] = {"name": uname, "points": 0}
-                        db_scores[uid]['points'] += pts
-
-                # ج. ترتيب المجموعات محلياً للعرض (من الأكثر نقاطاً للأقل)
-                sorted_scores = dict(sorted(db_scores.items(), key=lambda item: item[1]['points'], reverse=True))
-
-                # د. إرسال لوحة النتائج النهائية للمجموعة بناءً على بيانات الجدول
+                # أ. إرسال لوحة النتائج النهائية للمجموعة
                 await send_broadcast_final_results(
                     chat_id=cid, 
-                    scores=sorted_scores, 
+                    scores=group_scores, 
                     total_q=total_q, 
                     group_names=group_names_map
                 )
-                
-                # نفس بسيط للبوت لضمان عدم حظر تليجرام عند الإرسال المكثف
-                await asyncio.sleep(0.5) 
-
+                await asyncio.sleep(0.5) # نفس بسيط للبوت بين المجموعات
             except Exception as e: 
-                logging.error(f"⚠️ خطأ في جلب النتائج النهائية للمجموعة {cid}: {e}")
-
+                logging.error(f"Error in final results for {cid}: {e}")
+            
+            # ب. تنظيف رسائل الأسئلة والنتائج المؤقتة (مع نظام حماية من الـ Flood)
+            all_mids = messages_to_delete.get(cid, []) + results_to_delete.get(cid, [])
+            for i, mid in enumerate(all_mids):
+                try: 
+                    await bot.delete_message(cid, mid)
+                    # كل 5 رسائل نحذفها، ننتظر ثانية عشان تلجرام ما يزعل
+                    if i % 5 == 0:
+                        await asyncio.sleep(1)
+                except: 
+                    pass
        
         # 🚀 [ الخطوة الجوهرية: ترحيل النقاط من السجل الرقمي ] 🚀
         try:
@@ -4705,7 +4670,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
                 # 🔥 [ التشطيب النهائي: تفريغ سوبابيس ] 🔥
                 # نحذف "الأب" وبسبب CASCADE يختفي اللوج والمشاركين فوراً
-                await asyncio.sleep(5) # انتظار بسيط للتأكد من انتهاء كل العمليات
+                await asyncio.sleep(2) # انتظار بسيط للتأكد من انتهاء كل العمليات
                 supabase.table("active_quizzes").delete().eq("id", current_quiz_db_id).execute()
                 logging.info(f"🧹 تم تطهير النظام بالكامل للمسابقة {current_quiz_db_id}")
         
