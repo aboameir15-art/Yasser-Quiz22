@@ -5003,20 +5003,38 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
     # 🚀 تسجيل في سوبابيس
     await record_poll_answer_in_db(answer_data)
 
-    # 🔥 ربط التصويت بالرادار المحلي (للعرض في نتائج المجموعة)
+    # 🔥 ربط التصويت بالرادار المحلي (للعرض المباشر)
     cid = poll_info.get('chat_id')
-    if is_correct and cid in active_quizzes:
-        active_quizzes[cid]['winners'].append({
-            'id': user_id,
-            'name': user_name,
-            'time': round(t, 2),
-            'title': s_title,
-            'pts': total_pts
-        })
+    
+    if cid in active_quizzes:
+        if is_correct:
+            # 1️⃣ إضافة الأبطال للرادار المحلي
+            active_quizzes[cid]['winners'].append({
+                'id': user_id,
+                'name': user_name,
+                'time': t,          # الوقت الحقيقي
+                'title': s_title,   # اللقب المستحق (خارق الصمت، القناص، إلخ)
+                'pts': total_pts    # إجمالي النقاط المكتسبة
+            })
+        else:
+            # 2️⃣ إضافة المخطئين للرادار المحلي (التشطيب الملكي)
+            # نضمن وجود قائمة losers في القاموس أولاً
+            if 'losers' not in active_quizzes[cid]:
+                active_quizzes[cid]['losers'] = []
+                
+            active_quizzes[cid]['losers'].append({
+                'id': user_id,
+                'name': user_name,
+                'penalty': 5  # قيمة الخصم التي ستظهر في القالب الملكي
+            })
 
-    # 7. طباعة الرصد
-    status = "✅ كفو أصاب" if is_correct else "❌ أخطأ"
-    print(f"📡 [رصد]: {user_name} | {status} | الوقت: {t:.2f}s | نقاط: {total_pts}")
+    # 6. [قرح جو]: طباعة سريعة للرصد (للمطور في التيرمنال)
+    if is_correct:
+        status = f"✅ كفو أصاب (+{total_pts}ن)"
+    else:
+        status = "❌ أخطأ (-5ن)"
+        
+    print(f"📡 [رصد]: {user_name} | {status} | الوقت: {response_time:.2f} ثانية")
 # ============================================================
 # 1. إعداد حالات الإدارة - Admin States
 # ============================================================
