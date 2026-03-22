@@ -4572,46 +4572,61 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             # ترتيب الفائزين عالمياً حسب السرعة (الأسرع هو الأول)
             global_winners = sorted(global_winners, key=lambda x: x.get('time', 0))
 
+            # 7️⃣ تحديث السجلات وتوزيع النقاط (الفراغ 12)
             for cid in all_chats:
                 if cid in active_quizzes:
                     active_quizzes[cid]['active'] = False
-                
-                # تحديث نقاط الأعضاء المحليين في هذه المجموعة
+
+                # 🟢 [1] تحديث نقاط الفائزين (بناءً على السرعة)
                 local_winners = active_quizzes.get(cid, {}).get('winners', [])
                 for w in local_winners:
                     uid = w['id']
-                    uname = w['name'] # اسم العضو الفائز
-                    
+                    uname = w['name']
+                    pts_to_add = w.get('pts', 10) # جلب النقاط من الرادار (25, 20, 15 أو 10)
+
                     if uid not in group_scores[cid]:
                         group_scores[cid][uid] = {"name": uname, "points": 0}
-                    group_scores[cid][uid]['points'] += 2855
+                    group_scores[cid][uid]['points'] += pts_to_add
                     
-                    # 🔥 [ الربط العالمي للمجموعات ] 🔥
-                    # استدعاء الدالة لتحديث جدول المجموعات في سوبابيس
+                    # تحديث سوبابيس (إحصائيات المجموعة العالمية)
                     try:
-                        # نجلب اسم المجموعة من القاموس الذي عرفته سابقاً
                         gname = group_names_map.get(cid, "مجموعة مجهولة")
-                        
-                        await update_group_stats(
-                            group_id=cid,      # آيدي المجموعة
-                            group_name=gname,   # اسم المجموعة
-                            user_id=uid,       # آيدي العضو الفائز
-                            user_name=uname,    # اسم العضو الفائز
-                            points=10          # النقاط المضافة للمجموعة
-                        )
+                        await update_group_stats(cid, gname, uid, uname, pts_to_add)
                     except Exception as e:
-                        logging.error(f"⚠️ خطأ في تحديث إحصائيات المجموعة: {e}")
-              
-                # 🔵 [التعديل العالمي الشامل]
+                        logging.error(f"⚠️ خطأ تحديث إحصائيات الفوز: {e}")
+
+                # 🔴 [2] تحديث نقاط المخطئين (خصم النقاط)
+                local_losers = active_quizzes.get(cid, {}).get('losers', [])
+                for l in local_losers:
+                    l_uid = l['id']
+                    l_uname = l['name']
+                    penalty = l.get('penalty', 5) # الخصم المعتمد
+
+                    if l_uid not in group_scores[cid]:
+                        group_scores[cid][l_uid] = {"name": l_uname, "points": 0}
+                    
+                    # خصم النقاط من الذاكرة المحلية
+                    group_scores[cid][l_uid]['points'] -= penalty
+                    
+                    # تحديث سوبابيس بالخصم (اختياري حسب نظامك)
+                    try:
+                        gname = group_names_map.get(cid, "مجموعة مجهولة")
+                        await update_group_stats(cid, gname, l_uid, l_uname, -penalty)
+                    except Exception as e:
+                        logging.error(f"⚠️ خطأ تحديث إحصائيات الخصم: {e}")
+
+                # 🔵 [3] إرسال القالب الملكي الموحد
                 res_tasks.append(send_creative_results(
                     chat_id=cid, 
                     correct_ans=ans, 
-                    winners=global_winners,      # بطل الجولة (يراه الجميع)
-                    group_scores=group_scores,   # ترتيب كل اللاعبين والمجموعات (بدون حذف)
-                    is_public=True,              # تفعيل وضع الإذاعة العامة
+                    winners=local_winners,      # أبطال هذه المجموعة
+                    losers=local_losers,       # المخطئون في هذه المجموعة
+                    group_scores=group_scores, 
+                    is_public=True,
                     mode=quiz_data.get('mode', 'السرعة ⚡'),
-                    group_names=group_names_map  # قاموس الأسماء الذي عرفناه في بداية الدالة
+                    group_names=group_names_map
                 ))
+                
             
             # 🔥 استبدل السطر القديم بهذا البلوك لصيد مُعرفات رسائل الإجابة
             res_msgs = await asyncio.gather(*res_tasks, return_exceptions=True)
