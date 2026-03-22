@@ -4941,7 +4941,7 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
             s_title, extra_pts = "🏹 (المتمكن)", 2
         else:
             s_title, extra_pts = "🧠 (الذكي)", 0
-        total_pts = 10 + extra_pts
+        total_pts = 100 + extra_pts
     else:
         s_title, total_pts = "", 0
 
