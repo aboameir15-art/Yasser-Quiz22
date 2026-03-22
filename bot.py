@@ -4470,8 +4470,8 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     "voter_list": {},
                     "user_choices": {}
                 }).eq("id", current_quiz_id).execute()   
-            except Exception as up_err:
-                logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {i+1}: {up_err}")
+                except Exception as up_err:
+                    logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {i+1}: {up_err}")
 
             # السطر 123: تحديث الرادار المحلي (الرام) لكل مجموعة مشاركة
             for cid in chats_to_broadcast:
