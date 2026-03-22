@@ -4462,12 +4462,16 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             if current_quiz_db_id:
                 try:
                     supabase.table("active_quizzes").update({
-                        "current_answer": ans,
-                        "current_index": i + 1,
-                        "question_category_name": cat_name
-                    }).eq("id", current_quiz_db_id).execute()
-                except Exception as up_err:
-                    logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {i+1}: {up_err}")
+                    "current_index": i + 1,
+                    "current_answer": ans,
+                    "question_category_name": cat_name,
+                    "is_active": True,
+                    "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0},
+                    "voter_list": {},
+                    "user_choices": {}
+                }).eq("id", current_quiz_id).execute()   
+            except Exception as up_err:
+                logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {i+1}: {up_err}")
 
             # السطر 123: تحديث الرادار المحلي (الرام) لكل مجموعة مشاركة
             for cid in chats_to_broadcast:
