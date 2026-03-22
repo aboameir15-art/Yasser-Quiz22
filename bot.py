@@ -4441,9 +4441,9 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             
             # 🔥 [ إصلاح اسم القسم لكل سؤال ] 🔥
             if is_bot:
-                current_q_cat = q.get('category') or "بوت"
+                cat_name = q.get('category') or "بوت"
             else:
-                current_q_cat = q['categories']['name'] if (q.get('categories') and isinstance(q['categories'], dict)) else "عام"
+                cat_name = q['categories']['name'] if (q.get('categories') and isinstance(q['categories'], dict)) else "عام"
             
             # 🔵 [ الخطوة 3 ] تحديث المشرف (active_quizzes) - المزامنة اللحظية
             if current_quiz_db_id:
@@ -4451,7 +4451,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     supabase.table("active_quizzes").update({
                         "current_answer": ans,
                         "current_index": i + 1,
-                        "question_category_name": current_q_cat, # 👈 يظهر الآن (تاريخ، جغرافيا..)
+                        "question_category_name": cat_name, # 👈 يظهر الآن (تاريخ، جغرافيا..)
                         "is_active": True,
                         "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0}, # تصفير التصويت
                         "voter_list": {}, # تصفير القائمة
@@ -4471,7 +4471,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     "mode": quiz_data.get('mode', 'السرعة ⚡'),
                     "db_quiz_id": current_quiz_db_id, 
                     "current_index": i + 1,
-                    "category": current_q_cat, # 👈 يمرر للمايسترو بشكل صحيح
+                    "category": cat_name, # 👈 يمرر للمايسترو بشكل صحيح
                     "participants_ids": chats_to_broadcast,
                     "hint_sent": False
                 }
