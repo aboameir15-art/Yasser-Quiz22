@@ -4554,7 +4554,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     .eq("quiz_id", current_db_quiz_id) \
                     .eq("question_no", i + 1) \
                     .eq("is_correct", True) \
-                    .order("created_at", ascending=True) \
+                    .order("created_at", desc=False)
                     .limit(10) \
                     .execute()
 
