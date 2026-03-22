@@ -4923,7 +4923,7 @@ async def unified_answer_checker(m: types.Message):
                         quiz['active'] = False
                     return
 # ==========================================
-# --- [ رادار إجابات الـ Poll الهجين المطور ] ---
+# --- [ رادار إجابات الـ Poll الهجين المطور + نظام حماية الغش ] ---
 # ==========================================
 @dp.poll_answer_handler()
 async def handle_poll_answer(poll_answer: types.PollAnswer):
@@ -4931,55 +4931,81 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
     user_name = poll_answer.user.full_name
     poll_id = poll_answer.poll_id
     
-    # 1. جلب بيانات السؤال من "المخزن السريع" (active_polls)
-    # ملاحظة: يجب أن يكون المايسترو قد خزن هذه البيانات عند الإرسال
+    # 1. جلب بيانات السؤال من المخزن السريع
     poll_info = active_polls.get(poll_id)
-    
     if not poll_info:
-        # إذا لم نجد الـ ID، قد يكون السؤال قديماً أو البوت أعيد تشغيله
         return
 
-    # 2. التحقق من الإجابة (مقارنة الاختيار بالـ ID الصحيح)
+    # 🛑 [ حماية الغش: منع الإجابة المتعددة في مجموعات مختلفة ]
+    # نستخدم i (رقم السؤال الحالي) للتأكد أن المستخدم لم يجاوب عليه مسبقاً عالمياً
+    q_index = poll_info.get('current_num')
+    
+    # نتحقق من القائمة العالمية للمجاوبين (answered_users_global)
+    if q_index in answered_users_global and user_id in answered_users_global[q_index]:
+        # إذا وجدناه، يعني أنه جاوب في مجموعة أخرى.. ننهي العملية بصمت
+        print(f"🚫 [محاولة غش]: {user_name} حاول الإجابة مرة أخرى في مجموعة مختلفة!")
+        return
+
+    # 2. التحقق من الإجابة
     user_option_id = poll_answer.option_ids[0] 
     is_correct = (user_option_id == poll_info['correct_id'])
 
-    # 3. حساب وقت الاستجابة (دقة أجزاء الثانية)
+    # 3. حساب وقت الاستجابة
     response_time = (datetime.now() - poll_info['start_time']).total_seconds()
 
-    # 4. تجهيز بيانات الإدراج لجدول answers_log بالملي
+    # 4. تسجيل المستخدم في "قائمة المجاوبين العالمية" للسؤال الحالي فوراً
+    if q_index not in answered_users_global:
+        answered_users_global[q_index] = []
+    answered_users_global[q_index].append(user_id)
+
+    # 5. حساب النقاط والألقاب (محور السرعة)
+    t = float(response_time)
+    if is_correct:
+        if t < 1.0:
+            s_title, extra_pts = "⚡ (خارق الصمت)", 10
+        elif t < 3.0:
+            s_title, extra_pts = "🚀 (القناص السريع)", 5
+        elif t < 5.0:
+            s_title, extra_pts = "🏹 (المتمكن)", 2
+        else:
+            s_title, extra_pts = "🧠 (الذكي)", 0
+        total_pts = 10 + extra_pts
+    else:
+        s_title, total_pts = "", 0
+
+    # 6. تجهيز بيانات الإدراج لجدول answers_log
     answer_data = {
-        "quiz_id": poll_info.get('db_quiz_id'),      # الآيدي من جدول active_quizzes
-        "quiz_type": "اختيارات 📊",                  # نوع السؤال
-        "category_name": poll_info.get('category'),  # القسم (إسلامية، جغرافيا..)
-        "chat_id": poll_info.get('chat_id'),         # آيدي المجموعة أو الخاص
+        "quiz_id": poll_info.get('db_quiz_id'),
+        "quiz_type": "اختيارات 📊",
+        "category_name": poll_info.get('category'),
+        "chat_id": poll_info.get('chat_id'),
         "user_id": user_id,
         "user_name": user_name,
         "is_correct": is_correct,
-        "points_earned": 1 if is_correct else 0,    # نظام النقاط الافتراضي
-        "question_no": poll_info.get('current_num'), # ترتيب السؤال في المسابقة
+        "points_earned": total_pts,
+        "question_no": q_index,
         "total_quiz_questions": poll_info.get('total_num'),
         "answer_text": poll_info.get('correct_text') if is_correct else "خاطئة",
         "created_at": "now()"
     }
 
-    # 5. 🚀 استدعاء دالة التسجيل في سوبابيس
+    # 🚀 تسجيل في سوبابيس
     await record_poll_answer_in_db(answer_data)
 
-    # 🔥 [ السطر الجديد: ربط التصويت بالرادار المحلي ]
-    # هذا الجزء يخبر المحرك العالمي: "فلان جاوب صح في الجروب الفلاني، ضيفه للقائمة"
+    # 🔥 ربط التصويت بالرادار المحلي (للعرض في نتائج المجموعة)
     cid = poll_info.get('chat_id')
     if is_correct and cid in active_quizzes:
-        # إضافة الفائز للقائمة التي سيقرأها المحرك عند انتهاء الـ 15 ثانية
         active_quizzes[cid]['winners'].append({
             'id': user_id,
             'name': user_name,
-            'time': response_time
+            'time': round(t, 2),
+            'title': s_title,
+            'pts': total_pts
         })
 
-    # 6. [قرح جو]: طباعة سريعة للرصد
+    # 7. طباعة الرصد
     status = "✅ كفو أصاب" if is_correct else "❌ أخطأ"
-    print(f"📡 [رصد]: {user_name} | {status} | الوقت: {response_time:.2f} ثانية")
-    
+    print(f"📡 [رصد]: {user_name} | {status} | الوقت: {t:.2f}s | نقاط: {total_pts}")
 # ============================================================
 # 1. إعداد حالات الإدارة - Admin States
 # ============================================================
