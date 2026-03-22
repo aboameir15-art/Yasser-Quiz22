@@ -4541,35 +4541,36 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     await asyncio.gather(*close_tasks, return_exceptions=True)
 
             # 6️⃣ إغلاق السؤال وتحديث النقاط (جلب البيانات من السجل الرقمي)
-            res_tasks = []
-            current_db_quiz_id = quiz_data.get('id')
-            
-            # 🟢 [المحور الجديد]: جلب الأبطال من "سجل الإجابات" بدلاً من قوائم الذاكرة
+            # 6️⃣ جلب الأبطال من السجل الرقمي (تأكد من محاذاة الأسطر)
             global_winners = []
             try:
                 # جلب أسرع 10 إجابات صحيحة لهذا السؤال عالمياً من السجل
-                # نعتمد على created_at للترتيب بالملي ثانية
+                # لاحظ المحاذاة الدقيقة للنقاط (.) تحت بعضها البعض
                 query_res = supabase.table("answers_log") \
-                    .select("user_name, points_earned, user_id, chat_id") \
+                    .select("user_name, points_earned, user_id, chat_id, response_time") \
                     .eq("quiz_id", current_db_quiz_id) \
                     .eq("question_no", i + 1) \
                     .eq("is_correct", True) \
-                    .order("created_at", desc=False)
+                    .order("response_time", desc=False) \
                     .limit(10) \
                     .execute()
 
                 if query_res.data:
                     for idx, row in enumerate(query_res.data):
-                        # تحديد اللقب بناءً على النقاط المخزنة (التي حسبناها في المستشعر)
-                        pts = row['points_earned']
-                        s_title = "⚡ (خارق الصمت)" if pts >= 20 else "🚀 (القناص)" if pts >= 15 else "🏹 (المتمكن)" if pts >= 12 else "🧠 (الذكي)"
+                        pts = row['points_earned'] or 0
+                        # تحديد اللقب بناءً على النقاط
+                        if pts >= 20: s_title = "⚡ (خارق الصمت)"
+                        elif pts >= 15: s_title = "🚀 (القناص)"
+                        elif pts >= 12: s_title = "🏹 (المتمكن)"
+                        else: s_title = "🧠 (الذكي)"
                         
                         global_winners.append({
                             'id': row['user_id'],
                             'name': row['user_name'],
                             'pts': pts,
                             'title': s_title,
-                            'time': "مؤكد ✅" # أو يمكنك جلب الوقت لو أضفت عموده
+                            'time': row['response_time'],
+                            'chat_id': row['chat_id']
                         })
             except Exception as e:
                 logging.error(f"❌ خطأ جلب سجل الإجابات للجولة: {e}")
