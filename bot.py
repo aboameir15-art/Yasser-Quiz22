@@ -4371,10 +4371,8 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         # --- [ ج ] جلب وتجهيز الأسئلة من المخزن ---
         raw_cats = quiz_data.get('cats', [])
         if isinstance(raw_cats, str):
-            try: 
-                cat_ids_list = json.loads(raw_cats)
-            except: 
-                cat_ids_list = raw_cats.replace('[','').replace(']','').replace('"','').split(',')
+            try: cat_ids_list = json.loads(raw_cats)
+            except: cat_ids_list = raw_cats.replace('[','').replace(']','').replace('"','').split(',')
         else: 
             cat_ids_list = raw_cats
             
@@ -4384,36 +4382,27 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         table = "bot_questions" if is_bot else "questions"
         cat_col = "bot_category_id" if is_bot else "category_id"
         current_style = quiz_data.get('quiz_style', 'السرعة ⚡') 
-
-        # 1. جلب الأسئلة مع ربط الجداول (الـ Join مهم جداً هنا لاسم القسم)
-        # أضفت شرطاً لجلب اسم القسم بشكل صحيح حسب نوع الجدول
-        query = supabase.table(table).select("*, categories(name)" if not is_bot else "*")
-        res_q = query.in_(cat_col, cat_ids).execute()
+        
+        # 1️⃣ جلب الأسئلة مع التأكد من الربط الصحيح
+        res_q = supabase.table(table).select("*, categories(name)" if not is_bot else "*").in_(cat_col, cat_ids).execute()
         
         if not res_q.data:
             logging.error(f"⚠️ لم يتم العثور على أسئلة للقسم المحدد: {cat_ids}")
             return
 
-        # 2. تجهيز القائمة العشوائية
         pool = res_q.data
         random.shuffle(pool)
         count = int(quiz_data.get('questions_count', 10))
         selected_questions = pool[:count] 
         total_q = len(selected_questions)
-        # 3. 🔥 إصلاح استخراج اسم القسم (منطق خارق مشابه للمسابقة الخاصة) 🔥
-        # 1. نستخدم الاسم "الحي" في الذاكرة: selected_questions
-        sample_q = selected_questions[0]         
-        # 2. نحدد الـ engine_type بناءً على نوع الأسئلة (بوت أم مستخدم)
-        engine_type = "bot" if is_bot else "user"
 
-        if engine_type == "bot":
-            main_cat = sample_q.get('category') or "عام"
-        elif engine_type == "user":
-            main_cat = sample_q['categories']['name'] if (sample_q.get('categories') and isinstance(sample_q['categories'], dict)) else "أقسام الأعضاء"
+        # 2️⃣ استخراج اسم القسم الرئيسي (للسجل المركزي) بنفس منطق المحرك الخاص
+        sample_q = selected_questions[0]
+        if is_bot:
+            main_cat_name = sample_q.get('category') or "بوت"
         else:
-            main_cat = "قسم عام"
-            
-        
+            main_cat_name = sample_q['categories']['name'] if (sample_q.get('categories') and isinstance(sample_q['categories'], dict)) else "عام"
+
         group_scores = {cid: {} for cid in all_chats}
         messages_to_delete = {cid: [] for cid in all_chats}
         results_to_delete = {cid: [] for cid in all_chats}
@@ -4421,8 +4410,6 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         # 🟢 [ الخطوة 1: المشرف ] إنشاء سجل المسابقة المركزي
         try:
             creator_id = quiz_data.get('owner_id') or quiz_data.get('created_by') or 0
-            
-            # تأكدنا الآن أن main_cat لن تكون None أبداً ولن تسبب KeyError
             quiz_entry = supabase.table("active_quizzes").insert({
                 "quiz_name": f"إذاعة {owner_name}",
                 "created_by": creator_id,
@@ -4430,62 +4417,65 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 "is_active": True,
                 "participants_ids": [group_names_map.get(str(c), str(c)) for c in chats_to_broadcast],
                 "total_questions": total_q,
-                "category_name": main_cat, # القيمة المحمية
                 "quiz_type": "public",
+                "category_name": main_cat_name, # 👈 تم الإصلاح هنا
+                "quiz_style": current_style
             }).execute()
 
             if quiz_entry.data:
                 current_quiz_db_id = quiz_entry.data[0]['id']
                 logging.info(f"✅ سجل active_quizzes جاهز ID: {current_quiz_db_id}")
-    
-                # 🔥 [ الخطوة 2: المسجل ] الربط بجدول المشاركين (الحبل السري)
-                # تسجيل من انضم فعلياً في جدول quiz_participants لربط المجموعات بالـ ID
-                participants_records = [
-                    {"quiz_id": current_quiz_db_id, "chat_id": cid} 
-                    for cid in chats_to_broadcast
-                ]
+
+                participants_records = [{"quiz_id": current_quiz_db_id, "chat_id": cid} for cid in chats_to_broadcast]
                 supabase.table("quiz_participants").insert(participants_records).execute()
-                logging.info(f"🔗 المسجل ربط {len(chats_to_broadcast)} مجموعة بالمسابقة {current_quiz_db_id}")
 
         except Exception as e:
-            logging.error(f"❌ خطأ سوبابيس في مرحلة التسجيل والربط: {e}")
-            return # التوقف لضمان عدم ضياع النتائج
+            logging.error(f"❌ خطأ سوبابيس في مرحلة التسجيل: {e}")
+            return
 
         # --- [ د ] دورة البث الموحدة ---
         for i, q in enumerate(selected_questions):
-            answered_users_global[i + 1] = [] # تصفير قائمة المجاوبين للسؤال الحالي
+            answered_users_global[i + 1] = [] 
 
             ans = str(q.get('correct_answer') or q.get('answer_text') or "").strip()
-            cat_name = q.get('categories', {}).get('name', 'عام') if not is_bot else "بوت"
             
-            # 🔵 [ الخطوة 3 ] تحديث المشرف (active_quizzes) ببيانات السؤال الحالي
+            # 🔥 [ إصلاح اسم القسم لكل سؤال ] 🔥
+            if is_bot:
+                current_q_cat = q.get('category') or "بوت"
+            else:
+                current_q_cat = q['categories']['name'] if (q.get('categories') and isinstance(q['categories'], dict)) else "عام"
+            
+            # 🔵 [ الخطوة 3 ] تحديث المشرف (active_quizzes) - المزامنة اللحظية
             if current_quiz_db_id:
                 try:
                     supabase.table("active_quizzes").update({
-                    "current_index": i + 1,
-                    "current_answer": ans,
-                    "question_category_name": cat_name,
-                    "is_active": True,
-                    "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0},
-                    "voter_list": {},
-                    "user_choices": {}
-                }).eq("id", current_quiz_id).execute()   
+                        "current_answer": ans,
+                        "current_index": i + 1,
+                        "question_category_name": current_q_cat, # 👈 يظهر الآن (تاريخ، جغرافيا..)
+                        "is_active": True,
+                        "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0}, # تصفير التصويت
+                        "voter_list": {}, # تصفير القائمة
+                        "user_choices": {}
+                    }).eq("id", current_quiz_db_id).execute()
                 except Exception as up_err:
                     logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {i+1}: {up_err}")
 
-            # السطر 123: تحديث الرادار المحلي (الرام) لكل مجموعة مشاركة
+            # تحديث الرادار المحلي (الرام) لكل مجموعة
             for cid in chats_to_broadcast:
                 active_quizzes[cid] = {
                     "active": True,
                     "ans": ans,
                     "winners": [],
-                    "voted_users": [], # 👈 (جديد) لتعقب المصوتين في نظام الاختيارات
-                    "quiz_style": current_style, # 👈 (جديد) لتحديد نوع التعامل مع الإجابات
+                    "voted_users": [], 
+                    "quiz_style": current_style,
                     "mode": quiz_data.get('mode', 'السرعة ⚡'),
                     "db_quiz_id": current_quiz_db_id, 
                     "current_index": i + 1,
-                    "participants_ids": chats_to_broadcast
+                    "category": current_q_cat, # 👈 يمرر للمايسترو بشكل صحيح
+                    "participants_ids": chats_to_broadcast,
+                    "hint_sent": False
                 }
+
 
             # --- [ تجهيز التلميح ] ---
             normal_hint_str = ""
