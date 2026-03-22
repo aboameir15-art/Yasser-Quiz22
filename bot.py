@@ -492,17 +492,56 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
             
         msg += "  ━━━━━━━━━━━━━━━━━━\n\n"
 
-    msg += "<i>#رادار_المسابقات_العالمي 🌍</i>"
+    # --- [ 2. الترتيب العالمي (مدمج بدون تكرار) ] ---
+    msg += "📊 <b>الـنـقـاط الـتـراكمـيـة (TOP):</b>\n"
+    combined_players = {}
+    for gid, players in group_scores.items():
+        for uid, pdata in players.items():
+            if uid not in combined_players:
+                combined_players[uid] = {"name": pdata['name'], "points": 0}
+            combined_players[uid]['points'] += pdata['points']
+    
+    sorted_players = sorted(combined_players.values(), key=lambda x: x['points'], reverse=True)
+    # عرض التوب 5 فقط لجمالية القالب
+    for i, p in enumerate(sorted_players[:5]):
+        m = "👑" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "👤"
+        msg += f"{m} <b>{p['name']}</b> ⇠ <code>{p['points']}</code> ن\n"
+    
+    msg += "  ━━━━━━━━━━━━━━━━━━\n"
 
+    # --- [ 3. إحصائيات المجموعات (نظام الفرسان) ] ---
+    if is_public:
+        msg += "\n👥 <b>تـنـافـس الـمـجـمـوعـات :</b>\n"
+        group_ranking = []
+        for gid, players in group_scores.items():
+            if players:
+                total_group_pts = sum(p['points'] for p in players.values())
+                local_top = sorted(players.values(), key=lambda x: x['points'], reverse=True)
+                group_ranking.append({'id': gid, 'points': total_group_pts, 'players': local_top})
+        
+        sorted_groups = sorted(group_ranking, key=lambda x: x['points'], reverse=True)
+        for i, g in enumerate(sorted_groups):
+            g_name = group_names.get(str(g['id']), f"جروب {g['id']}") if group_names else f"جروب {g['id']}"
+            # إضافة وسام لأول مجموعة
+            g_medal = "⭐" if i == 0 else "▫️"
+            msg += f"{g_medal} <b>{g_name}</b> ⇠ (<code>{g['points']}</code>ن)\n"
+            # عرض فارس المجموعة الأول فقط لتقليل طول الرسالة
+            if g['players']:
+                msg += f"    أبطال المجموعه: 👤 <b>{g['players'][0]['name']}</b>\n"
+            msg += "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
+
+    msg += "\n🔥 <i>استعد.. السؤال التالي في الطريق!</i>"
+
+    # الإرسال مع return (ضروري جداً لمحرك الحذف)
     try:
-        # الإرسال مع تفعيل HTML
         return await bot.send_message(chat_id, msg, parse_mode="HTML")
     except Exception as e:
         import logging
-        logging.error(f"❌ خطأ في إرسال نتائج الجولة: {e}")
-        # Fallback في حال فشل التنسيق
+        logging.error(f"⚠️ HTML Parsing Error: {e}")
+        # في حال فشل الـ HTML، يتم تنظيف النص وإرساله كنص عادي لضمان الحذف لاحقاً
         clean_text = msg.replace("<b>", "").replace("</b>", "").replace("<code>", "").replace("</code>", "").replace("<i>", "").replace("</i>", "")
         return await bot.send_message(chat_id, clean_text)
+        
 
 async def send_broadcast_final_results(chat_id, scores, total_q, group_names=None):
     try:
