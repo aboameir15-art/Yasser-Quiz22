@@ -4564,12 +4564,23 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             # 6️⃣ إغلاق السؤال وتحديث النقاط (داخل حلقة الأسئلة)
             res_tasks = []
             
-            # 🟢 [إضافة] نجمع كل الفائزين من كل المجموعات في قائمة واحدة "عالمية"
+            # 🟢 [محرك المنافسة العالمية] - تجميع الأبطال والمخطئين
             global_winners = []
-            for cid in all_chats:
-                global_winners.extend(active_quizzes.get(cid, {}).get('winners', []))
+            global_losers = []
             
-            # ترتيب الفائزين عالمياً حسب السرعة (الأسرع هو الأول)
+            for cid in all_chats:
+                gname = group_names_map.get(cid, "مجموعة مجهولة")
+                
+                for w in active_quizzes.get(cid, {}).get('winners', []):
+                    w_global = w.copy()
+                    w_global['name'] = f"{w['name']} 🏛️ ({gname})"
+                    global_winners.append(w_global)
+                
+                for l in active_quizzes.get(cid, {}).get('losers', []):
+                    l_global = l.copy()
+                    l_global['name'] = f"{l['name']} 🏛️ ({gname})"
+                    global_losers.append(l_global)
+            
             global_winners = sorted(global_winners, key=lambda x: x.get('time', 0))
 
             # 7️⃣ تحديث السجلات وتوزيع النقاط (الفراغ 12)
@@ -4577,56 +4588,52 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 if cid in active_quizzes:
                     active_quizzes[cid]['active'] = False
 
-                # 🟢 [1] تحديث نقاط الفائزين (بناءً على السرعة)
+                # --- [1] تحديث نقاط الفائزين محلياً وسحابياً ---
                 local_winners = active_quizzes.get(cid, {}).get('winners', [])
-                for w in local_winners:
-                    uid = w['id']
-                    uname = w['name']
-                    pts_to_add = w.get('pts', 10) # جلب النقاط من الرادار (25, 20, 15 أو 10)
+                
+                # 💡 متغير لرصد أول إجابة صحيحة في المجموعة لمنحها البونص
+                group_bonus_awarded = False 
 
-                    if uid not in group_scores[cid]:
-                        group_scores[cid][uid] = {"name": uname, "points": 0}
+                for w in local_winners:
+                    uid, uname, pts_to_add = w['id'], w['name'], w.get('pts', 10)
+                    if uid not in group_scores[cid]: group_scores[cid][uid] = {"name": uname, "points": 0}
                     group_scores[cid][uid]['points'] += pts_to_add
                     
-                    # تحديث سوبابيس (إحصائيات المجموعة العالمية)
+                    # حساب بونص المجموعة (5 نقاط لأول واحد يجاوب صح فقط)
+                    current_pts = pts_to_add
+                    if not group_bonus_awarded:
+                        current_pts += 5  # إضافة 5 نقاط للمجموعة
+                        group_bonus_awarded = True # قفل البونص لهذا السؤال في هذه المجموعة
+                    
                     try:
                         gname = group_names_map.get(cid, "مجموعة مجهولة")
-                        await update_group_stats(cid, gname, uid, uname, pts_to_add)
-                    except Exception as e:
-                        logging.error(f"⚠️ خطأ تحديث إحصائيات الفوز: {e}")
+                        # تحديث سوبابيس بالنقاط الشخصية + بونص المجموعة (لأول فائز فقط)
+                        await update_group_stats(cid, gname, uid, uname, current_pts)
+                    except Exception as e: 
+                        logging.error(f"⚠️ خطأ فوز: {e}")
 
-                # 🔴 [2] تحديث نقاط المخطئين (خصم النقاط)
+                # --- [2] تحديث نقاط المخطئين (الخصم) ---
                 local_losers = active_quizzes.get(cid, {}).get('losers', [])
                 for l in local_losers:
-                    l_uid = l['id']
-                    l_uname = l['name']
-                    penalty = l.get('penalty', 5) # الخصم المعتمد
-
-                    if l_uid not in group_scores[cid]:
-                        group_scores[cid][l_uid] = {"name": l_uname, "points": 0}
-                    
-                    # خصم النقاط من الذاكرة المحلية
+                    l_uid, l_uname, penalty = l['id'], l['name'], l.get('penalty', 5)
+                    if l_uid not in group_scores[cid]: group_scores[cid][l_uid] = {"name": l_uname, "points": 0}
                     group_scores[cid][l_uid]['points'] -= penalty
-                    
-                    # تحديث سوبابيس بالخصم (اختياري حسب نظامك)
                     try:
                         gname = group_names_map.get(cid, "مجموعة مجهولة")
                         await update_group_stats(cid, gname, l_uid, l_uname, -penalty)
-                    except Exception as e:
-                        logging.error(f"⚠️ خطأ تحديث إحصائيات الخصم: {e}")
+                    except Exception as e: logging.error(f"⚠️ خطأ خصم: {e}")
 
                 # 🔵 [3] إرسال القالب الملكي الموحد
                 res_tasks.append(send_creative_results(
                     chat_id=cid, 
                     correct_ans=ans, 
-                    winners=local_winners,      # أبطال هذه المجموعة
-                    losers=local_losers,       # المخطئون في هذه المجموعة
+                    winners=global_winners, 
+                    losers=global_losers,   
                     group_scores=group_scores, 
                     is_public=True,
                     mode=quiz_data.get('mode', 'السرعة ⚡'),
                     group_names=group_names_map
                 ))
-                
             
             # 🔥 استبدل السطر القديم بهذا البلوك لصيد مُعرفات رسائل الإجابة
             res_msgs = await asyncio.gather(*res_tasks, return_exceptions=True)
