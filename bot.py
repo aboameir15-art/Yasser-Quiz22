@@ -454,32 +454,32 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
     msg += "  ━━━━━━━━━━━━━━━━━━\n\n"
 
     # --- [ 1. عرض الأبطال مع ألقاب السرعة للهدية ] ---
+    # --- [ 1. عرض الأبطال بنظام السرعة الموحد ] ---
     if winners:
-        msg += "🌟 <b>نجم الجولة الحالية:</b>\n"
+        msg += "🌟 <b>نجوم الجولة الحالية:</b>\n"
         
-        # في نظام السرعة نعرض الأول فقط بلقب مميز
-        winners_to_show = winners if is_time_mode else [winners[0]]
-        
-        for idx, w in enumerate(winners_to_show):
-            # تنسيق الميداليات
-            medal = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉" if idx == 2 else "✨"
+        # عرض الأبطال (الأوائل) الذين تم تمريرهم من المحرك
+        # سيتم عرضهم جميعاً بنفس التنسيق (ميدالية + وقت + لقب)
+        for idx, w in enumerate(winners):
+            # تحديد الميدالية حسب الترتيب
+            if idx == 0: medal = "🥇"
+            elif idx == 1: medal = "🥈"
+            elif idx == 2: medal = "🥉"
+            else: medal = "✨"
             
-            # 🎁 [إضافة الهدية]: لقب السرعة
-            speed_title = ""
-            if not is_time_mode and 'time' in w:
-                t = float(w['time'])
-                if t < 1.0: speed_title = "⚡ (خارق الصمت)"
-                elif t < 3.0: speed_title = "🚀 (القناص السريع)"
-                elif t < 5.0: speed_title = "🏹 (المتمكن)"
-                else: speed_title = "🧠 (الذكي)"
-
-            time_info = f" ⏱ <code>{w['time']}s</code>" if 'time' in w else ""
-            msg += f"{medal} ⇠ <b>{w['name']}</b> {time_info} {speed_title}\n"
+            # جلب البيانات التي جهزها "رادار الإجابات" (المستشعر)
+            name = w.get('name', 'لاعب مجهول')
+            time_val = w.get('time', 0.0)
+            # اللقب (الهدية) الذي تم حقنه في المستشعر (خارق الصمت، القناص، إلخ)
+            speed_title = w.get('title', "🧠 (الذكي)") 
+            
+            # سطر موحد للجميع يجمع (الميدالية + الاسم + الوقت + اللقب)
+            msg += f"{medal} ⇠ <b>{name}</b> ⏱ <code>{time_val}s</code> {speed_title}\n"
     else:
         msg += "💤 <b>انتهى الوقت دون حسم!</b>\n"
     
     msg += "  ━━━━━━━━━━━━━━━━━━\n\n"
-
+  
     # --- [ 2. الترتيب العالمي (مدمج بدون تكرار) ] ---
     msg += "📊 <b>الـنـقـاط الـتـراكمـيـة (TOP):</b>\n"
     combined_players = {}
