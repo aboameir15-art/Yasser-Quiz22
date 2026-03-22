@@ -4520,32 +4520,44 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     if hasattr(m, 'poll') and m.poll is not None:
                         active_quizzes[cid]['last_poll_id'] = m.message_id
 
-                        t_limit = int(quiz_data.get('time_limit', 15))
+
+            # 5️⃣ [ محرك الانتظار الموحد ] - الفراغ 12
+            # جلب الوقت المحدد للسؤال من الإعدادات (quiz_data)
+            try:
+                # نتحقق من وجود المفتاح 'time_limit' ونحوله لرقيم
+                t_limit = int(quiz_data.get('time_limit', 15))
+            except (ValueError, TypeError, AttributeError):
+                # إذا حدث خطأ في القيمة أو النوع، نعتمد 15 ثانية كافتراضي
+                t_limit = 15
+            
             start_wait = time.time()
             
-            while time.time() - start_wait < t_limit:
+            # حلقة الانتظار الذكية بناءً على إعدادات المسابقة
+            while (time.time() - start_wait) < t_limit:
+                # رادار التحقق: هل لا تزال هناك مجموعات لم تنتهِ؟
                 still_active = any(active_quizzes.get(c, {}).get('active', False) for c in chats_to_broadcast)
                 if not still_active:
-                    logging.info("⚡ الرادار أعطى إشارة إغلاق.. الانتقال للنتائج فوراً.")
+                    logging.info("⚡ الجميع أجابوا.. اختصار الوقت والذهاب للنتائج.")
                     break
                 await asyncio.sleep(0.1)
 
-            # 🛑 [ إغلاق الاستطلاعات فوراً ]
+            # 🛑 [ إغلاق الاستطلاعات ]
             if current_style == 'اختيارات 📊':
-                close_tasks = []
-                for cid in chats_to_broadcast:
-                    p_id = active_quizzes.get(cid, {}).get('last_poll_id')
-                    if p_id:
-                        close_tasks.append(bot.stop_poll(cid, p_id))
+                close_tasks = [
+                    bot.stop_poll(cid, active_quizzes[cid]['last_poll_id']) 
+                    for cid in chats_to_broadcast 
+                    if active_quizzes.get(cid, {}).get('last_poll_id')
+                ]
                 if close_tasks:
                     await asyncio.gather(*close_tasks, return_exceptions=True)
 
-            # 6️⃣ إغلاق السؤال وتحديث النقاط (جلب البيانات من السجل الرقمي)
-            # 6️⃣ جلب الأبطال من السجل الرقمي (تأكد من محاذاة الأسطر)
+            # 6️⃣ جلب الأبطال من "سجل الإجابات" (answers_log)
+            res_tasks = []
+            current_db_quiz_id = quiz_data.get('id')
             global_winners = []
+            
             try:
-                # جلب أسرع 10 إجابات صحيحة لهذا السؤال عالمياً من السجل
-                # لاحظ المحاذاة الدقيقة للنقاط (.) تحت بعضها البعض
+                # جلب أسرع 10 فائزين من الجدول الرقمي لهذا السؤال تحديداً
                 query_res = supabase.table("answers_log") \
                     .select("user_name, points_earned, user_id, chat_id, response_time") \
                     .eq("quiz_id", current_db_quiz_id) \
@@ -4556,9 +4568,11 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     .execute()
 
                 if query_res.data:
-                    for idx, row in enumerate(query_res.data):
-                        pts = row['points_earned'] or 0
-                        # تحديد اللقب بناءً على النقاط
+                    for row in query_res.data:
+                        # جلب النقاط من السجل (التي تم حسابها في المستشعر)
+                        pts = row.get('points_earned', 0) or 0
+                        
+                        # توزيع الألقاب بناءً على نقاط السرعة المخزنة
                         if pts >= 20: s_title = "⚡ (خارق الصمت)"
                         elif pts >= 15: s_title = "🚀 (القناص)"
                         elif pts >= 12: s_title = "🏹 (المتمكن)"
@@ -4569,11 +4583,11 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                             'name': row['user_name'],
                             'pts': pts,
                             'title': s_title,
-                            'time': row['response_time'],
+                            'time': row.get('response_time', 0),
                             'chat_id': row['chat_id']
                         })
             except Exception as e:
-                logging.error(f"❌ خطأ جلب سجل الإجابات للجولة: {e}")
+                logging.error(f"❌ خطأ جلب سجل الإجابات للجولة {i+1}: {e}")
 
             # تحديث النقاط المحلية لكل مجموعة من السجل (لضمان الدقة)
             for cid in all_chats:
