@@ -76,11 +76,9 @@ async def safe_database_cleaner():
             supabase.table("active_quizzes").delete().lt("created_at", cutoff_time).execute()
         except: pass
         await asyncio.sleep(3600) # يفحص كل ساعة مرة واحدة فقط
-
 # ==========================================
 # 4. محركات العرض والقوالب (Display Engines) - النسخة المصلحة
 # ==========================================
-
 # [3] دالة قالب السؤال (المصلحة)
 async def send_quiz_question(chat_id, q_data, current_num, total_num, settings):
     is_pub = settings.get('is_public', False) 
@@ -246,7 +244,6 @@ def normalize_arabic(text):
 # ==========================================
 # --- [ المحرك الخارق: الرادار الذكي والقوافي ] ---
 # ==========================================
-
 async def get_ultra_smart_options(question_text, category_name, correct_ans):
     try:
         norm_correct = normalize_arabic(correct_ans)
@@ -504,8 +501,9 @@ async def deep_privacy_scan(user):
 
     return False
     
+ 
 
- async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_public=False, mode="السرعة ⚡", group_names=None, losers=None):
+async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_public=False, mode="السرعة ⚡", group_names=None, losers=None):
     """
     🎁 نسخة الهدية - قالب ياسر الملكي (التطوير النهائي 2026)
     تم دمج درع حماية الخصوصية "الماسح الليزري" مع الحفاظ على التصميم الفخم.
@@ -619,6 +617,7 @@ async def deep_privacy_scan(user):
         logging.error(f"⚠️ HTML Parsing Error: {e}")
         clean_text = msg.replace("<b>", "").replace("</b>", "").replace("<code>", "").replace("</code>", "").replace("<i>", "").replace("</i>", "")
         return await bot.send_message(chat_id, clean_text)
+        
         
 async def send_broadcast_final_results(chat_id, scores, total_q, group_names=None):
     try:
