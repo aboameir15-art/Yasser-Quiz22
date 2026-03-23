@@ -3816,10 +3816,13 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
 
         # 3️⃣ محرك التبديلات المطور (تحديث 2026 - نظام التدوير)
         elif any(c.data.startswith(x) for x in ['toggle_hint_', 'toggle_speed_', 'toggle_scope_', 'toggle_style_', 'toggle_count_', 'toggle_time_']):
+            # استخراج البيانات بدقة
+            data_parts = c.data.split('_')
             quiz_id = data_parts[2]
-            
-            # 📊 تدوير عدد الأسئلة (10 إلى 80)
-            if 'toggle_count_' in c.data:
+            user_id = data_parts[3]
+
+            # 📊 [1] تدوير عدد الأسئلة (10 إلى 80)
+            if c.data.startswith('toggle_count_'):
                 counts = [10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80]
                 res = supabase.table("saved_quizzes").select("questions_count").eq("id", quiz_id).single().execute()
                 curr = res.data.get('questions_count', 10)
@@ -3827,15 +3830,15 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 supabase.table("saved_quizzes").update({"questions_count": next_val}).eq("id", quiz_id).execute()
                 await c.answer(f"📊 الأسئلة: {next_val}")
 
-            # ⏱️ تدوير الوقت (10 إلى 60)
-            elif 'toggle_time_' in c.data:
+            # ⏱️ [2] تدوير الوقت (10 إلى 60)
+            elif c.data.startswith('toggle_time_'):
                 times = [10, 15, 20, 30, 45, 60]
                 res = supabase.table("saved_quizzes").select("time_limit").eq("id", quiz_id).single().execute()
                 curr = res.data.get('time_limit', 15)
                 next_val = times[(times.index(curr) + 1) % len(times)] if curr in times else 15
                 supabase.table("saved_quizzes").update({"time_limit": next_val}).eq("id", quiz_id).execute()
                 await c.answer(f"⏱️ الوقت: {next_val}ث")
-
+       
             # 🎨 تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
             elif 'toggle_style_' in c.data:
                 styles = ["اختيارات 📊", "مباشرة ⚡", "الكل 📋"]
