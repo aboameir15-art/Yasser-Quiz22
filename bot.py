@@ -4,6 +4,7 @@ import random
 import time
 import os
 import json
+import unicodedata
 import re
 import io
 import difflib
@@ -440,10 +441,74 @@ async def send_hybrid_poll_to_chat(chat_id, title, options, correct_id, correct_
 # ==========================================
 # --- [ 2. بداية الدوال المساعدة قالب الاجابات  ] ---
 # ==========================================
-async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_public=False, mode="السرعة ⚡", group_names=None, losers=None):
+async def deep_privacy_scan(user):
     """
-    🎁 نسخة الهدية - قالب ياسر الملكي (التصميم الفخم 2026)
-    تنسيق مفصل للأبطال، المخطئين، وتنافس المجموعات بنظام النقاط والسرعة.
+    الماسح الليزري لحماية الخصوصية:
+    يفحص (الاسم، اليوزر، البايو) لرصد أي أثر أنثوي.
+    """
+    if not user: return False
+
+    # 1. جلب البيانات الأساسية
+    name = user.first_name or ""
+    if user.last_name: name += f" {user.last_name}"
+    username = (user.username or "").lower()
+    
+    # محاولة جلب البايو (تتطلب get_chat في بعض المكتبات)
+    try:
+        chat_full = await bot.get_chat(user.id)
+        bio = (chat_full.bio or "").lower()
+    except:
+        bio = ""
+
+    # 2. تطهير النصوص من الزخارف (الاسم والبايو)
+    def clean_text(text):
+        return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii').lower()
+
+    clean_name = clean_text(name)
+    clean_bio = clean_text(bio)
+    clean_user = clean_text(username)
+
+    # 3. رادار النهايات العربية (التي طلبتها بدقة)
+    # يه، ية، ة، وة، يا، وه، اي، ات
+    arabic_suffixes = r'(يه|ية|ة|وة|يا|وه|اي|ات|ى)$'
+    if re.search(arabic_suffixes, name.strip()):
+        return True
+
+    # 4. كلمات دلالية مؤنثة في البايو والاسم (القاموس اليمني والعربي)
+    female_keywords = [
+        'بنت', 'ام ', 'الانسة', 'الاخت', 'مدام', 'حرم', 'دكتورة', 'امة', 'نور',
+        'خريجة', 'طالبة', 'متزوجة', 'مخطوبة', 'يمنية', 'صنعانية', 'عدنية', 'يافعية',
+        'girl', 'miss', 'mrs', 'queen', 'princess', 'lady', 'she', 'her'
+    ]
+    
+    combined_text = f"{name} {username} {bio}"
+    if any(kw in combined_text for kw in female_keywords):
+        return True
+
+    # 5. القائمة الذهبية لأسماء البنات (عربي + إنجليزي)
+    feminine_list = [
+        'مريم', 'العنود', 'زينب', 'حنان', 'امل', 'عبير', 'ريم', 'روان', 'شهد', 
+        'رهف', 'خلود', 'دلال', 'نجلاء', 'غيداء', 'جواهر', 'هناء', 'وفاء',
+        'maryam', 'alanood', 'reem', 'sara', 'sarah', 'nour', 'zainab', 'amal'
+    ]
+    
+    if any(fn in clean_name for fn in feminine_list) or \
+       any(fn in clean_user for fn in feminine_list) or \
+       any(fn in clean_bio for fn in feminine_list):
+        return True
+
+    # 6. فحص النهايات اللاتينية (Aisha, Haya, Maria)
+    if re.search(r'(ah|ia|ya|ina|line)$', clean_name) or \
+       re.search(r'(ah|ia|ya|ina|line)$', clean_user):
+        return True
+
+    return False
+    
+
+ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_public=False, mode="السرعة ⚡", group_names=None, losers=None):
+    """
+    🎁 نسخة الهدية - قالب ياسر الملكي (التطوير النهائي 2026)
+    تم دمج درع حماية الخصوصية "الماسح الليزري" مع الحفاظ على التصميم الفخم.
     """
     mode_icon = "⚡" if "سرعة" in mode else "⏰"
     
@@ -468,10 +533,22 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
             u_id = w.get('id')
             time_val = w.get('time', 0.0)
             pts = w.get('pts', 0)
+
+            # 🛡️ [ تنفيذ الماسح الليزري لحماية البنات ]
+            try:
+                # نجلب كائن المستخدم بالكامل لفحص اليوزر والبايو
+                user_info = await bot.get_chat(u_id)
+                is_female = await deep_privacy_scan(user_info)
+            except:
+                is_female = False # في حال الفشل نعتبره حساب عادي
+
+            # تحديد نوع الرابط (حماية للمؤنث، رابط للشباب)
+            if is_female:
+                user_link = f"<b>{name}</b>"
+            else:
+                user_link = f'<a href="tg://user?id={u_id}">{name}</a>'
             
-            user_link = f'<a href="tg://user?id={u_id}">{name}</a>'
-            
-            # تنسيق البطل الجديد
+            # تنسيق البطل (نفس تصميمك بالضبط)
             msg += f"{medal} ا:ا ⇠ {user_link} + (<code>{pts}</code>ن)\n"
             msg += f"🔹 السرعة: ⏱ <code>{time_val}s</code>\n"
     else:
@@ -486,9 +563,20 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
             l_name = l.get('name', 'لاعب')
             l_id = l.get('id')
             penalty = l.get('penalty', 5)
-            l_link = f'<a href="tg://user?id={l_id}">{l_name}</a>'
+
+            # 🛡️ [ فحص الخصوصية للمخطئين أيضاً ]
+            try:
+                l_user_info = await bot.get_chat(l_id)
+                l_is_female = await deep_privacy_scan(l_user_info)
+            except:
+                l_is_female = False
+
+            if l_is_female:
+                l_link = f"<b>{l_name}</b>"
+            else:
+                l_link = f'<a href="tg://user?id={l_id}">{l_name}</a>'
             
-            # تنسيق المخطئ الجديد
+            # تنسيق المخطئ (نفس تصميمك بالضبط)
             msg += f"❌ ا:ا ⇠ {l_link} (خصم <code>{penalty}</code>ن)\n"
         msg += "  ╰──────────────────\n"
         msg += "  ━━━━━━━━━━━━━━━━━━\n"
@@ -497,27 +585,24 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
     if is_public and group_scores:
         msg += "\n👥 <b>تـنـافـس الـمـجـمـوعـات :</b>\n"
         
-        # ترتيب المجموعات حسب إجمالي النقاط
         group_ranking = []
         for gid, players in group_scores.items():
             if players:
                 total_group_pts = sum(p['points'] for p in players.values())
-                # ترتيب اللاعبين داخل كل مجموعة
                 sorted_local_players = sorted(players.values(), key=lambda x: x['points'], reverse=True)
                 group_ranking.append({'id': gid, 'points': total_group_pts, 'players': sorted_local_players})
         
         sorted_groups = sorted(group_ranking, key=lambda x: x['points'], reverse=True)
         
         for i, g in enumerate(sorted_groups):
-            g_name = group_names.get(str(g['id']), f"جروب {g['id']}") if group_names else f"جروب {g['id']}"
+            g_id_str = str(g['id'])
+            g_name = group_names.get(g_id_str, f"جروب {g_id_str}") if group_names else f"جروب {g_id_str}"
             g_medal = "⭐" if i == 0 else "🔹"
             
             msg += f"{g_medal} <b>{g_name}</b>\n"
             msg += f"🔹 رصيد المجموعة: (<code>{g['points']}</code>ن)\n"
             
-            # عرض كل اللاعبين في المجموعة بنقاطهم
             for p in g['players']:
-                # هنا نفترض أن 'id' اللاعب موجود في بيانات الـ pdata لو أردت منشن
                 p_name = p.get('name', 'لاعب')
                 p_points = p.get('points', 0)
                 msg += f"👤 ا:ا <b>{p_name}</b>\n"
