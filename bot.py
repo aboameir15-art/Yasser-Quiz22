@@ -551,33 +551,30 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
         msg += "🌟 <b>نجوم الجولة الحالية:</b>\n"
         
         for idx, w in enumerate(winners):
-            # اختيار الأيقونة حسب الترتيب
-            if idx == 0: medal = "🥇"
-            elif idx == 1: medal = "🥈"
-            elif idx == 2: medal = "🥉"
-            elif idx == 3: medal = "🏅"
-            else: medal = "🎖"
+            medal = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉" if idx == 2 else "🏅" if idx == 3 else "🎖"
             
-            name = w.get('name', 'لاعب مجهول')
+            # نحتفظ بالاسم الأصلي كما هو للطباعة
+            raw_name = w.get('name', 'لاعب مجهول')
             u_id = w.get('id')
             time_val = w.get('time', 0.0)
             pts = w.get('pts', 0)
 
-            # 🛡️ [ تنفيذ الماسح الليزري لحماية البنات ]
+            # 🛡️ [ الرادار يعمل في الكواليس ]
             try:
-                # نجلب كائن المستخدم بالكامل لفحص اليوزر والبايو
                 user_info = await bot.get_chat(u_id)
-                is_female = await deep_privacy_scan(user_info)
+                # الفحص يستخدم التقشير والتشظي داخلياً لاتخاذ القرار
+                is_female = await deep_privacy_scan(user_info, bot)
             except:
-                is_female = False # في حال الفشل نعتبره حساب عادي
+                is_female = False 
 
-            # تحديد نوع الرابط (حماية للمؤنث، رابط للشباب)
+            # 🛡️ تحديد نوع الرابط (استخدام raw_name الأصلي هنا)
             if is_female:
-                user_link = f"<b>{name}</b>"
+                # يظهر الاسم المزخرف كما هو لكن غير قابل للضغط
+                user_link = f"<b>{raw_name}</b>"
             else:
-                user_link = f'<a href="tg://user?id={u_id}">{name}</a>'
+                # يظهر الاسم المزخرف كرابط للشباب
+                user_link = f'<a href="tg://user?id={u_id}">{raw_name}</a>'
             
-            # تنسيق البطل (نفس تصميمك بالضبط)
             msg += f"{medal} ا:ا ⇠ {user_link} + (<code>{pts}</code>ن)\n"
             msg += f"🔹 السرعة: ⏱ <code>{time_val}s</code>\n"
     else:
@@ -589,23 +586,22 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
     if losers:
         msg += "  ╭─── { <b>إجابات خاطئة</b> } ───\n"
         for l in losers:
-            l_name = l.get('name', 'لاعب')
+            raw_l_name = l.get('name', 'لاعب')
             l_id = l.get('id')
             penalty = l.get('penalty', 5)
 
-            # 🛡️ [ فحص الخصوصية للمخطئين أيضاً ]
+            # 🛡️ [ الفحص الخفي للمخطئين ]
             try:
                 l_user_info = await bot.get_chat(l_id)
-                l_is_female = await deep_privacy_scan(l_user_info)
+                l_is_female = await deep_privacy_scan(l_user_info, bot)
             except:
                 l_is_female = False
 
             if l_is_female:
-                l_link = f"<b>{l_name}</b>"
+                l_link = f"<b>{raw_l_name}</b>"
             else:
-                l_link = f'<a href="tg://user?id={l_id}">{l_name}</a>'
+                l_link = f'<a href="tg://user?id={l_id}">{raw_l_name}</a>'
             
-            # تنسيق المخطئ (نفس تصميمك بالضبط)
             msg += f"❌ ا:ا ⇠ {l_link} (خصم <code>{penalty}</code>ن)\n"
         msg += "  ╰──────────────────\n"
         msg += "  ━━━━━━━━━━━━━━━━━━\n"
