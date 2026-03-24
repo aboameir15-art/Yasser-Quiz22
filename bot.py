@@ -707,17 +707,23 @@ async def send_broadcast_final_results(chat_id, scores, total_q, group_names=Non
             })
 
         # --- [ 2. عرض المجموعات مع ترتيب الرموز ] ---
+        # --- [ 2. عرض المجموعات مع ترتيب الرموز ] ---
         if group_summary:
+            # ترتيب المجموعات حسب إجمالي النقاط
             sorted_groups = sorted(group_summary, key=lambda x: x['total'], reverse=True)
             
             for i, g in enumerate(sorted_groups, 1):
+                # تحديد الرمز بناءً على الترتيب
                 medal = "🥇 :" if i == 1 else "🥈 :" if i == 2 else "🥉 :" if i == 3 else "🔹 :"
+                
+                # تعريف الحالة (هل هي الفائزة؟) لإضافة وسام الفوز
                 win_status = " ✨ [+1 🏆 : فوز]" if i == 1 else ""
                 
                 msg += f"{medal} <b>{g['name']}</b> {win_status}\n"
                 msg += f"📊 : إجمالي النقاط ( <code>{g['total']}</code> ن )\n"
                 msg += f"{g['players_text']}\n"
                 msg += "  ┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅\n"
+
 
                 medal = "🥇 :" if i == 1 else "🥈 :" if i == 2 else "🥉 :" if i == 3 else "🔹 :"
                 
@@ -729,6 +735,7 @@ async def send_broadcast_final_results(chat_id, scores, total_q, group_names=Non
                 msg += "  ┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅\n"
  
         # --- [ 3. ملوك الإذاعة (الترتيب الفردي) ] ---
+
         if all_global_players:
             msg += "\n👑 <b>: تـرتـيـب مـلـوك الـعـالـم :</b>\n"
             # ترتيب اللاعبين حسب النقاط
