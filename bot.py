@@ -25,22 +25,6 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from supabase import create_client, Client
 
-# دالة المنبه الداخلي لضمان عدم النوم
-async def self_ping():
-    while True:
-        try:
-            # استبدل هذا الرابط برابط بوتك على Render
-            url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}.onrender.com/"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        logging.info("📍 Self-ping successful! Bot is still awake.")
-        except Exception as e:
-            logging.error(f"⚠️ Self-ping failed: {e}")
-        
-        # انتظر 10 دقائق (600 ثانية) قبل المحاولة التالية
-        await asyncio.sleep(600)
-
 # --- [ 1. إعدادات الهوية والاتصال ] ---
 ADMIN_ID = 7988144062
 OWNER_USERNAME = "@Ya_79k"
@@ -5827,36 +5811,69 @@ async def process_auth_callback(c: types.CallbackQuery):
     await c.message.delete()
     await admin_manage_groups(c)
 # ==========================================
-# 5. نهاية الملف: ضمان التشغيل 24/7 + المنظف الآلي
+# 5. نهاية الملف: ضمان التشغيل 24/7 + المنبه الذكي
 # ==========================================
 from aiohttp import web
+import asyncio
+import aiohttp
 
-# دالة الرد على "نغزة" المواقع الخارجية مثل Cron-job
+# 1️⃣ دالة الرد على "نغزة" المواقع الخارجية (UptimeRobot / Cron-job)
 async def handle_ping(request):
     return web.Response(text="Bot is Active and Running! 🚀")
+
+# 2️⃣ دالة "المنبه الداخلي" (Self-Ping) - لضمان بقاء البوت مستيقظاً رغماً عن السيرفر
+async def self_ping():
+    # ننتظر 30 ثانية حتى يتأكد البوت من العمل تماماً عند البداية
+    await asyncio.sleep(30)
+    while True:
+        try:
+            # Render يعطيك رابط موقعك تلقائياً في هذا المتغير
+            app_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+            if app_host:
+                app_url = f"https://{app_host}.onrender.com/"
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(app_url) as response:
+                        if response.status == 200:
+                            logging.info("📍 [Self-Ping] تم نغز البوت داخلياً.. مستيقظ وجاهز! ✅")
+            else:
+                logging.warning("⚠️ لم يتم العثور على RENDER_EXTERNAL_HOSTNAME")
+        except Exception as e:
+            logging.error(f"⚠️ [Self-Ping] فشل النغز الداخلي: {e}")
+        
+        # نكرر العملية كل 10 دقائق (600 ثانية)
+        await asyncio.sleep(600)
+
 if __name__ == '__main__':
-    # 1. إعداد سيرفر ويب صغير في الخلفية (Keep-Alive)
+    # 3️⃣ إعدادات السجلات (اللوج) - فتحنا "الحنفية" عشان نشوف النبض
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+
+    # 4️⃣ إعداد سيرفر ويب صغير في الخلفية (Keep-Alive)
     app = web.Application()
     app.router.add_get('/', handle_ping)
-    loop.create_task(self_ping())
-    loop = asyncio.get_event_loop()
+    
+    # الحصول على الـ loop الحالي بشكل آمن
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
     runner = web.AppRunner(app)
     loop.run_until_complete(runner.setup())
     
-    # 2. تحديد المنفذ وتشغيل السيرفر
+    # تحديد المنفذ (Render يستخدم 10000 غالباً)
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     
-    # تشغيل السيرفر كـ "مهمة" جانبية
+    # 5️⃣ تشغيل "المهام الجانبية" (سيرفر الويب + المنبه الداخلي)
     loop.create_task(site.start())
-    print(f"✅ Keep-alive server started on port {port}")
-
-    # تم حذف المنظف من هنا لضمان عدم توقف البوت 🚀
-
-    # 4. إعدادات السجلات والتشغيل النهائي للبوت
-    logging.basicConfig(level=logging.INFO)
+    loop.create_task(self_ping()) # 👈 هذي هي "حقنة الكافيين" للبوت
     
-    # بدء استقبال الرسائل (Polling)
-    print("🤖 Bot is now polling...")
-    executor.start_polling(dp, skip_updates=True)
+    print(f"✅ Keep-alive system started on port {port}")
+    print("🤖 Bot is now polling... Happy Trading!")
 
+    # 6️⃣ بدء استقبال الرسائل (السطر الأخير دائماً)
+    executor.start_polling(dp, skip_updates=True)
