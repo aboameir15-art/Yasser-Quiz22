@@ -25,6 +25,22 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from supabase import create_client, Client
 
+# دالة المنبه الداخلي لضمان عدم النوم
+async def self_ping():
+    while True:
+        try:
+            # استبدل هذا الرابط برابط بوتك على Render
+            url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}.onrender.com/"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        logging.info("📍 Self-ping successful! Bot is still awake.")
+        except Exception as e:
+            logging.error(f"⚠️ Self-ping failed: {e}")
+        
+        # انتظر 10 دقائق (600 ثانية) قبل المحاولة التالية
+        await asyncio.sleep(600)
+
 # --- [ 1. إعدادات الهوية والاتصال ] ---
 ADMIN_ID = 7988144062
 OWNER_USERNAME = "@Ya_79k"
@@ -5822,7 +5838,7 @@ if __name__ == '__main__':
     # 1. إعداد سيرفر ويب صغير في الخلفية (Keep-Alive)
     app = web.Application()
     app.router.add_get('/', handle_ping)
-    
+    loop.create_task(self_ping())
     loop = asyncio.get_event_loop()
     runner = web.AppRunner(app)
     loop.run_until_complete(runner.setup())
@@ -5843,3 +5859,4 @@ if __name__ == '__main__':
     # بدء استقبال الرسائل (Polling)
     print("🤖 Bot is now polling...")
     executor.start_polling(dp, skip_updates=True)
+
