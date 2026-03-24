@@ -3789,9 +3789,9 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             # --- [ أزرار التدوير الذكية ] ---
             kb.row(
                 # زر تدوير عدد الأسئلة
-                InlineKeyboardButton(f"📊 الأسئلة: {q_count}", callback_data=f"toggle_count_{quiz_id}_{user_id}"),
+                InlineKeyboardButton(f"📊 الأسئلة: {q_count}", callback_data=f"togglecount_{quiz_id}_{user_id}"),
                 # زر تدوير الوقت
-                InlineKeyboardButton(f"⏱️ الوقت: {q_time}ث", callback_data=f"toggle_time_{quiz_id}_{user_id}")
+                InlineKeyboardButton(f"⏱️ الوقت: {q_time}ث", callback_data=f"toggletime_{quiz_id}_{user_id}")
             )
 
             # زر تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
@@ -3820,7 +3820,7 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             quiz_id = data_parts[2]
             
             # 📊 تدوير عدد الأسئلة (10 إلى 80)
-            if 'toggle_count_' in c.data:
+            if 'togglecount_' in c.data:
                 counts = ["10", "15", "20", "25", "30", "35", "40", "50", "60", "70", "80"]
                 res = supabase.table("saved_quizzes").select("questions_count").eq("id", quiz_id).single().execute()
                 curr = res.data.get('questions_count', "10")
@@ -3829,7 +3829,7 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 await c.answer(f"📊 الأسئلة: {next_val}")
 
             # ⏱️ تدوير الوقت (10 إلى 60)
-            elif 'toggle_time_' in c.data:
+            elif 'toggletime_' in c.data:
                 times = ["10", "15", "20", "30", "45", "60"]
                 res = supabase.table("saved_quizzes").select("time_limit").eq("id", quiz_id).single().execute()
                 curr = res.data.get('time_limit', "15")
