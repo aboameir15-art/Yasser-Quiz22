@@ -3821,18 +3821,18 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             
             # 📊 تدوير عدد الأسئلة (10 إلى 80)
             if 'toggle_count_' in c.data:
-                counts = [10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80]
+                counts = ["10", "15", "20", "25", "30", "35", "40", "50", "60", "70", "80"]
                 res = supabase.table("saved_quizzes").select("questions_count").eq("id", quiz_id).single().execute()
-                curr = res.data.get('questions_count', 10)
+                curr = res.data.get('questions_count', "10")
                 next_val = counts[(counts.index(curr) + 1) % len(counts)] if curr in counts else 10
                 supabase.table("saved_quizzes").update({"questions_count": next_val}).eq("id", quiz_id).execute()
                 await c.answer(f"📊 الأسئلة: {next_val}")
 
             # ⏱️ تدوير الوقت (10 إلى 60)
             elif 'toggle_time_' in c.data:
-                times = [10, 15, 20, 30, 45, 60]
+                times = ["10", "15", "20", "30", "45", "60"]
                 res = supabase.table("saved_quizzes").select("time_limit").eq("id", quiz_id).single().execute()
-                curr = res.data.get('time_limit', 15)
+                curr = res.data.get('time_limit', "15")
                 next_val = times[(times.index(curr) + 1) % len(times)] if curr in times else 15
                 supabase.table("saved_quizzes").update({"time_limit": next_val}).eq("id", quiz_id).execute()
                 await c.answer(f"⏱️ الوقت: {next_val}ث")
