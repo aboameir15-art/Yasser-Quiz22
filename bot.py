@@ -853,9 +853,14 @@ async def send_final_results2(chat_id, overall_scores, total_q):
             else:
                 round_iq = 30
 
-            # 🔗 رابط المستخدم المباشر (بدون فحص لأنها مسابقة خاصة)
-            user_link = f'<a href="tg://user?id={player["id"]}">{player["name"]}</a>'
-            
+            # 🔗 رابط المستخدم المباشر (باستخدام المعرف المكتشف)
+            if p_id:
+                user_link = f'<a href="tg://user?id={p_id}">{p_name}</a>'
+            else:
+                user_link = f"<b>{p_name}</b>"
+            # جلب المعرف بأكثر من طريقة لمنع خطأ الـ KeyError
+            p_id = player.get('id') or player.get('user_id') or player.get('uid')
+            p_name = player.get('name', 'لاعب مجهول')
             # السطر الذهبي (عرض النتائج)
             msg += f"{icon} {user_link}\n"
             msg += f"🏅 <b>:</b> المركز ( {i+1} ) ⇠ <b>{player['points']}</b> ن\n"
