@@ -760,7 +760,8 @@ async def send_broadcast_final_results(chat_id, scores, total_q, group_names=Non
                 if is_female:
                     p_link = f"<b>{p['name']}</b>"
                 else:
-                    p_link = f'<a href="tg://user?id={uid}">{p['name']}</a>'
+                    # استخدمنا " للخارج لكي نقدر نستخدم ' للداخل بدون مشاكل
+                    p_link = f'<a href="tg://user?id={uid}">{p["name"]}</a>'
 
                 msg += f"{icon} {p_link} ⇠ <b>{p['points']}</b> ن (🧠 {iq}% IQ)\n"
 
