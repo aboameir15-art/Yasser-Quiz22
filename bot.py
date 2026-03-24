@@ -4746,20 +4746,25 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             # 6️⃣ إغلاق السؤال وتحديث النقاط (داخل حلقة الأسئلة)
             res_tasks = []
             # 🏁 [ محرك القوة العالمية - التشطيب الملكي الصافي ]
-            # 1️⃣ تجميع الأبطال والمخطئين عالمياً (بيانات صافية بدون إضافات نصية)
+            # 1️⃣ تجميع الفائزين والمخطئين من كل المجموعات
             global_winners = []
             global_losers = []
             
             for cid in all_chats:
                 if cid in active_quizzes:
-                    # تجميع الفائزين كما هم
-                    global_winners.extend(active_quizzes[cid].get('winners', []))
-                    # تجميع المخطئين كما هم
-                    global_losers.extend(active_quizzes[cid].get('losers', []))
+                    # 🚀 تجميع الفائزين مع حفظ "هوية المجموعة" لكل بطل
+                    for winner in active_quizzes[cid].get('winners', []):
+                        winner['home_cid'] = cid  # 👈 الرادار اللي يحفظ أصل البطل
+                        global_winners.append(winner)
+                    
+                    # 🛡️ تجميع المخطئين بنفس الطريقة (إذا احتجت تمييزهم)
+                    for loser in active_quizzes[cid].get('losers', []):
+                        loser['home_cid'] = cid
+                        global_losers.append(loser)
             
-            # ترتيب الفائزين عالمياً حسب السرعة (الأسرع يتصدر القائمة 🥇)
+            # 🏆 ترتيب ملوك العالم حسب السرعة (الأسرع يتصدر 🥇)
             global_winners = sorted(global_winners, key=lambda x: x.get('time', 0))
-
+            
             # 2️⃣ تحديث السجلات، بونص المجموعة، وقاعدة البيانات
             for cid in all_chats:
                 if cid in active_quizzes:
