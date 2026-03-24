@@ -727,23 +727,52 @@ async def send_broadcast_final_results(chat_id, scores, total_q, group_names=Non
                 msg += f"📊 : إجمالي النقاط ( <code>{g['total']}</code> ن )\n"
                 msg += f"{g['players_text']}\n"
                 msg += "  ┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅\n"
-
+ 
         # --- [ 3. ملوك الإذاعة (الترتيب الفردي) ] ---
         if all_global_players:
             msg += "\n👑 <b>: تـرتـيـب مـلـوك الـعـالـم :</b>\n"
+            # ترتيب اللاعبين حسب النقاط
             sorted_global = sorted(all_global_players.items(), key=lambda x: x[1]['points'], reverse=True)
             
             for i, (uid, p) in enumerate(sorted_global[:5], 1):
                 icon = "🥇 :" if i == 1 else "🥈 :" if i == 2 else "🥉 :" if i == 3 else "👤 :"
-                iq = min(int((p['points'] / max_possible_pts) * 100) + 40, 100) if max_possible_pts > 0 else 40
-                msg += f"{icon} {p['name']} ⇠ <b>{p['points']}</b> ن (🧠 {iq}% IQ)\n"
+                
+                # 🧠 [ إصلاح معادلة الذكاء ]
+                # النقاط / 10 تعطينا عدد الإجابات الصحيحة (لأن كل إجابة بـ 10 نقاط)
+                correct_answers = p['points'] / 10
+                if total_q > 0:
+                    # النسبة المئوية للإجابات الصحيحة من إجمالي الأسئلة
+                    iq_ratio = (correct_answers / total_q) * 100
+                    # ذكاء يبدأ من 50 وينتهي بـ 100 حسب دقة الإجابات
+                    iq = min(int(iq_ratio) + 50, 100) 
+                else:
+                    iq = 50
+
+                # 🛡️ [ فحص الخصوصية لملوك العالم ]
+                try:
+                    # نحتاج UID رقمي للفحص
+                    user_info = await bot.get_chat(int(uid))
+                    is_female = await deep_privacy_scan(user_info, bot)
+                except:
+                    is_female = False
+
+                # حماية الرابط مع الحفاظ على الاسم الأصلي
+                if is_female:
+                    p_link = f"<b>{p['name']}</b>"
+                else:
+                    p_link = f'<a href="tg://user?id={uid}">{p['name']}</a>'
+
+                msg += f"{icon} {p_link} ⇠ <b>{p['points']}</b> ن (🧠 {iq}% IQ)\n"
 
         if not found_any_score:
             msg = "🌍 <b>: انتهت الإذاعة !</b>\n\nلم يتم تسجيل أي نقاط ."
         else:
+            # --- [ 4. إحصائيات المشاركة والختام ] ---
+            total_participants = len(all_global_players)
             msg += "\n  ━━━━━━━━━━━━━━━━━━\n"
-            msg += f"📋 : إجمالي الأسئلة ( <b>{total_q}</b> )\n"
-            msg += "✅ : تم ترحيل الفوز للأبطال بنجاح !"
+            msg += f"👥 : عدد المشاركين ( <b>{total_participants}</b> بطل )\n"
+            msg += f"📋 : إجمالي الأسئلة ( <b>{total_q}</b> سؤال )\n"
+            msg += "✅ : تم تسجيل بيانات المسابقة في ملف كل لاعب  !"
 
         return await bot.send_message(chat_id, msg, parse_mode="HTML")
 
