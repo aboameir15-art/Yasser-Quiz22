@@ -438,66 +438,97 @@ async def send_hybrid_poll_to_chat(chat_id, title, options, correct_id, correct_
 # ==========================================
 # --- [ 2. بداية الدوال المساعدة قالب الاجابات  ] ---
 # ==========================================
-async def deep_privacy_scan(user):
+import re
+import unicodedata
+
+def atomic_cleaner(text):
     """
-    الماسح الليزري لحماية الخصوصية:
-    يفحص (الاسم، اليوزر، البايو) لرصد أي أثر أنثوي.
+    1. محرك التقشير الذري:
+    يفكك زخارف الجوكر والرموز الملتصقة ليعيد الحرف لأصله الخام.
+    """
+    if not text: return ""
+    
+    # تفكيك الحروف المزخرفة (مثل فك الارتباط بين السين والجوكر الملتصق بها)
+    normalized = unicodedata.normalize('NFKD', text)
+    
+    # إبقاء الحروف العربية واللاتينية فقط وحذف كل رموز الجوكر (النجوم، الرموز التاريخية، الإيموجي)
+    # المدى \u0600-\u06FF يغطي الحروف العربية الصافية
+    clean = re.sub(r'[^\u0600-\u06FF a-zA-Z]', '', normalized)
+    
+    # حذف "التطويل" (ـ) الذي يستخدم في التمطيط مثل ســـــمر
+    clean = clean.replace('ـ', '')
+    
+    # توحيد المسافات
+    return " ".join(clean.split()).strip()
+
+async def deep_privacy_scan(user, bot):
+    """
+    الماسح الليزري لحماية الخصوصية بنظام التشظي وإزالة الجوكر.
     """
     if not user: return False
 
-    # 1. جلب البيانات الأساسية
-    name = user.first_name or ""
-    if user.last_name: name += f" {user.last_name}"
+    # --- [ جلب وتطهير البيانات ] ---
+    raw_name = f"{user.first_name or ''} {user.last_name or ''}"
     username = (user.username or "").lower()
     
-    # محاولة جلب البايو (تتطلب get_chat في بعض المكتبات)
+    bio = ""
     try:
         chat_full = await bot.get_chat(user.id)
         bio = (chat_full.bio or "").lower()
-    except:
-        bio = ""
+    except: pass
 
-    # 2. تطهير النصوص من الزخارف (الاسم والبايو)
-    def clean_text(text):
-        return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii').lower()
+    # تطهير ليزري للاسم والبيو
+    pure_name = atomic_cleaner(raw_name)
+    pure_bio = atomic_cleaner(bio)
+    
+    # نظام التشظي (دمج الحروف المتباعدة مثل 'ر ي م')
+    fragmented_name = pure_name.replace(" ", "")
 
-    clean_name = clean_text(name)
-    clean_bio = clean_text(bio)
-    clean_user = clean_text(username)
+    # --- [ الدرع الأول: قائمة المستثنيات الذكورية ] ---
+    # أسماء ذكورية تنتهي بنهايات أنثوية (لمنع حظر الرجال بالخطأ)
+    male_exceptions = [
+        'حمزة', 'طلحة', 'عتبة', 'قتيبة', 'حذيفة', 'أسامة', 'خليفة', 
+        'جمعة', 'يحيى', 'زكريا', 'علاء', 'البراء', 'طه'
+    ]
+    if any(ex in pure_name for ex in male_exceptions):
+        return False
 
-    # 3. رادار النهايات العربية (التي طلبتها بدقة)
-    # يه، ية، ة، وة، يا، وه، اي، ات
-    arabic_suffixes = r'(يه|ية|ة|وة|يا|وه|اي|ات|ى)$'
-    if re.search(arabic_suffixes, name.strip()):
+    # --- [ الدرع الثاني: رادار النهايات العربية ] ---
+    # يه، ية، ة، وة، يا، وه، اي، ات، ى
+    arabic_suffixes = r'.*(يه|ية|ة|وة|يا|وه|اي|ات|ى)$'
+    if re.search(arabic_suffixes, pure_name):
         return True
 
-    # 4. كلمات دلالية مؤنثة في البايو والاسم (القاموس اليمني والعربي)
+    # --- [ الدرع الثالث: كلمات دلالية (يمنية وعامة) ] ---
     female_keywords = [
-        'بنت', 'ام ', 'الانسة', 'الاخت', 'مدام', 'حرم', 'دكتورة', 'امة', 'نور',
-        'خريجة', 'طالبة', 'متزوجة', 'مخطوبة', 'يمنية', 'صنعانية', 'عدنية', 'يافعية',
-        'girl', 'miss', 'mrs', 'queen', 'princess', 'lady', 'she', 'her'
+        'بنت', 'ام ', 'الانسة', 'الاخت', 'مدام', 'دكتورة', 'امة', 
+        'خريجة', 'طالبة', 'متزوجة', 'مخطوبة', 'يمنية', 'صنعانية', 
+        'عدنية', 'يافعية', 'تعزية', 'حضرمية', 'فراشة', 'وردة', 
+        'زهرة', 'ياسمينة', 'غيمة', 'لؤلؤة', 'اميرة', 'ملكة', 'كيوت'
     ]
     
-    combined_text = f"{name} {username} {bio}"
-    if any(kw in combined_text for kw in female_keywords):
+    combined_content = f"{pure_name} {fragmented_name} {pure_bio} {username}"
+    if any(kw in combined_content for kw in female_keywords):
         return True
 
-    # 5. القائمة الذهبية لأسماء البنات (عربي + إنجليزي)
+    # --- [ الدرع الرابع: القائمة الذهبية لأسماء البنات ] ---
+    # تشمل الأسماء الصريحة التي قد لا تنتهي بـ "ة"
     feminine_list = [
-        'مريم', 'العنود', 'زينب', 'حنان', 'امل', 'عبير', 'ريم', 'روان', 'شهد', 
-        'رهف', 'خلود', 'دلال', 'نجلاء', 'غيداء', 'جواهر', 'هناء', 'وفاء',
-        'maryam', 'alanood', 'reem', 'sara', 'sarah', 'nour', 'zainab', 'amal'
+        'مريم', 'العنود', 'زينب', 'حنان', 'امل', 'عبير', 'ريم', 'روان', 
+        'شهد', 'رهف', 'خلود', 'دلال', 'نجلاء', 'غيداء', 'جواهر', 'هناء', 
+        'وفاء', 'سمر', 'سيمان', 'هدهد', 'نور', 'تغريد', 'افنان'
     ]
     
-    if any(fn in clean_name for fn in feminine_list) or \
-       any(fn in clean_user for fn in feminine_list) or \
-       any(fn in clean_bio for fn in feminine_list):
+    if any(fn in fragmented_name for fn in feminine_list):
         return True
 
-    # 6. فحص النهايات اللاتينية (Aisha, Haya, Maria)
-    if re.search(r'(ah|ia|ya|ina|line)$', clean_name) or \
-       re.search(r'(ah|ia|ya|ina|line)$', clean_user):
-        return True
+    # --- [ الدرع الخامس: النهايات اللاتينية (Aisha, Fatima) ] ---
+    # فحص النهايات اللاتينية مع استثناء (Abdullah)
+    if re.search(r'(ah|ia|ya|ina|line)$', pure_name.lower()) or \
+       re.search(r'(ah|ia|ya|ina|line)$', username):
+        # استثناء الأسماء التي تنتهي بلفظ الجلالة باللاتينية
+        if not pure_name.lower().endswith(('ullah', 'allah')):
+            return True
 
     return False
     
