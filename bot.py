@@ -839,16 +839,25 @@ async def send_final_results2(chat_id, overall_scores, total_q):
         
         # الأيقونات مع الفواصل لضبط اليمين
         medals = ["🥇 :", "🥈 :", "🥉 :", "👤 :", "👤 :"]
-
         for i, player in enumerate(sorted_players[:10]):  # عرض توب 10
             # اختيار الأيقونة المناسبة
             icon = medals[i] if i < 5 else "👤 :"
             
-            # حساب IQ الجولة
-            round_iq = min(int((player['points'] / max_possible_pts) * 100) + 40, 100) if max_possible_pts > 0 else 40
+            # 🧠 [ حساب IQ الجولة المسبوك - يبدأ من 30% ]
+            # أقصى نقاط ممكنة (110 ن × عدد الأسئلة)
+            max_possible_pts = total_q * 110 
+            if max_possible_pts > 0:
+                # نسبة الأداء مضروبة في 70 لضبط الميزان مع البداية من 30
+                performance_ratio = (player['points'] / max_possible_pts) * 70
+                round_iq = min(int(performance_ratio) + 30, 100)
+            else:
+                round_iq = 30
+
+            # 🔗 رابط المستخدم المباشر (بدون فحص لأنها مسابقة خاصة)
+            user_link = f'<a href="tg://user?id={player["id"]}">{player["name"]}</a>'
             
-            # السطر الذهبي (محاذاة من اليمين)
-            msg += f"{icon} <b>{player['name']}</b>\n"
+            # السطر الذهبي (عرض النتائج)
+            msg += f"{icon} {user_link}\n"
             msg += f"🏅 <b>:</b> المركز ( {i+1} ) ⇠ <b>{player['points']}</b> ن\n"
             msg += f"🧠 <b>:</b> ذكاء الجولة ⇠ <code>{round_iq}% IQ</code>\n"
             
