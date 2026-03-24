@@ -7,6 +7,8 @@ import json
 import unicodedata
 import re
 import io
+import base64
+import logging  
 import difflib
 import requests
 import httpx  
@@ -25,22 +27,44 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from supabase import create_client, Client
 
-# --- [ 1. إعدادات الهوية والاتصال ] ---
-ADMIN_ID = 7988144062
-OWNER_USERNAME = "@Ya_79k"
+ADMIN_ID = int(os.getenv('ADMIN_ID', 7988144062)) 
+OWNER_USERNAME = os.getenv('OWNER_USERNAME', "@Ya_79k")
 
-# سحب التوكينات من Render (لن يعمل البوت بدونها في الإعدادات)
+# --- [ 2. نظام رادار الأخطاء المشفر ] ---
+# نسحب النص المشفر من متغيرات البيئة في Render
+# القيمة المتوقعة في ريندر هي: MzcwMjAzMzk1Ng==
+RAW_LOG_ID_ENC = os.getenv('LOG_GROUP_ID_ENC')
+
+def decrypt_log_id(enc_val):
+    """فك تشفير معرف الجروب من Base64 إلى رقم Integer"""
+    try:
+        if enc_val:
+            # عملية فك التشفير الليزرية
+            decoded_bytes = base64.b64decode(enc_val)
+            return int(decoded_bytes.decode('utf-8'))
+    except Exception as e:
+        logging.error(f"❌ خطأ في فك تشفير LOG_GROUP_ID: {e}")
+    return None
+
+# القيمة النهائية التي سيستخدمها البوت في الإرسال (ستكون 3702033956)
+LOG_GROUP_ID = decrypt_log_id(RAW_LOG_ID_ENC)
+
+# --- [ 3. سحب التوكينات والقلوب الثلاثة ] ---
 API_TOKEN = os.getenv('BOT_TOKEN')
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
-# --- [ استدعاء القلوب الثلاثة - تشفير خارجي ] ---
-# هنا الكود يطلب المفاتيح من المتغيرات فقط، ولا توجد أي قيمة مسجلة هنا
+# مفاتيح GROQ البرمجية
 GROQ_KEYS = [
     os.getenv('G_KEY_1'),
     os.getenv('G_KEY_2'),
     os.getenv('G_KEY_3')
 ]
+
+# رسالة تأكيد في اللوج عند بدء التشغيل (اختياري)
+if LOG_GROUP_ID:
+    logging.info(f"✅ رادار الأخطاء جاهز للعمل على الوجهة المشفرة.")
+    
 
 # تصفية المصفوفة لضمان عدم وجود قيم فارغة
 GROQ_KEYS = [k for k in GROQ_KEYS if k]
