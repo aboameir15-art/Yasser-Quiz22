@@ -2999,12 +2999,12 @@ async def process_auth_callback(c: types.CallbackQuery):
     if action == "approve":
         supabase.table("groups_hub").update({"status": "active"}).eq("group_id", target_id).execute()
         await c.answer("تم التفعيل ✅", show_alert=True)
-        await bot.send_message(target_id, "🎉 مبارك! القروب مفعل. أرسل كلمة (مسابقة) للبدء.")
+        await bot.send_message(target_id, "يمكنم الأن أستخدام البوت تم إصلاح بنجاح لإضافة افكار تخطر في بالك لا تنسى تكلمني لتقديم البوت على ارقى مستوى .")
         
     elif action == "block":
         supabase.table("groups_hub").update({"status": "blocked"}).eq("group_id", target_id).execute()
         await c.answer("تم الحظر ❌", show_alert=True)
-        await bot.send_message(target_id, "🚫 تم رفض طلب التفعيل وحظر القروب.")
+        await bot.send_message(target_id, "🚫 البوت الآن في وضع الصيانة يرجى الانتظار قليلاً لاصلاح الأخطاء 😊.")
     
     await c.message.delete()
     await admin_manage_groups(c)
