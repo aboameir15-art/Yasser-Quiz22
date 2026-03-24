@@ -3873,9 +3873,9 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 await c.answer(f"🔖 النظام: {new_val}")
 
             # 🔄 تحديث الواجهة فوراً (ليظهر الرقم الجديد في الزر)
-            c.data = f"quiz_settings_{user_id}_{quiz_id}"
+            c.data = f"quiz_settings_{quiz_id}_{user_id}"
             return await handle_secure_actions(c, state)
-        
+            
         # 4️⃣ الحفظ والعمليات النهائية (تبدأ من السطر 8 كما طلبت)
         elif c.data.startswith('save_quiz_process_'):
             quiz_id = data_parts[3] 
