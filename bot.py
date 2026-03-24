@@ -645,7 +645,7 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
         clean_text = msg.replace("<b>", "").replace("</b>", "").replace("<code>", "").replace("</code>", "").replace("<i>", "").replace("</i>", "")
         return await bot.send_message(chat_id, clean_text)
         
-        
+
 async def send_broadcast_final_results(chat_id, scores, total_q, group_names=None):
     try:
         msg = "🌍 <b>تـم اخـتـتـام المسابقة الـعـالـمـيـة</b> 🌍\n"
@@ -655,7 +655,6 @@ async def send_broadcast_final_results(chat_id, scores, total_q, group_names=Non
 
         all_global_players = {}
         group_summary = []
-        max_possible_pts = total_q * 10 
         found_any_score = False
 
         # --- [ 1. معالجة البيانات ] ---
@@ -674,8 +673,25 @@ async def send_broadcast_final_results(chat_id, scores, total_q, group_names=Non
                 name = p_data.get('name', 'لاعب')
                 
                 group_total_pts += pts
-                p_link = f'<a href="tg://user?id={uid}">{name}</a>'
-                # ترتيب سطر اللاعب من اليمين
+
+                # 🛡️ [ تنفيذ الماسح الليزري لحماية البنات ]
+                try:
+                    # نجلب كائن المستخدم للفحص (اليوزر والبايو)
+                    user_info = await bot.get_chat(uid)
+                    # الفحص يستخدم "التقشير والتشظي" داخلياً لاتخاذ القرار
+                    is_female = await deep_privacy_scan(user_info, bot)
+                except:
+                    is_female = False # في حال الفشل نعتبره حساب عادي
+
+                # تحديد نوع الرابط (مع الحفاظ على الاسم الأصلي المزخرف)
+                if is_female:
+                    # اسم البنت يظهر كـ نص غليظ فقط (بدون رابط)
+                    p_link = f"<b>{name}</b>"
+                else:
+                    # اسم الشاب يظهر كرابط قابل للضغط
+                    p_link = f'<a href="tg://user?id={uid}">{name}</a>'
+                
+                # إضافة اللاعب للقائمة
                 group_players_list.append(f"👤 : {p_link} [ <b>{pts}</b> ن ]")
 
                 u_id_str = str(uid)
@@ -695,7 +711,14 @@ async def send_broadcast_final_results(chat_id, scores, total_q, group_names=Non
             sorted_groups = sorted(group_summary, key=lambda x: x['total'], reverse=True)
             
             for i, g in enumerate(sorted_groups, 1):
-                is_winner = (i == 1)
+                medal = "🥇 :" if i == 1 else "🥈 :" if i == 2 else "🥉 :" if i == 3 else "🔹 :"
+                win_status = " ✨ [+1 🏆 : فوز]" if i == 1 else ""
+                
+                msg += f"{medal} <b>{g['name']}</b> {win_status}\n"
+                msg += f"📊 : إجمالي النقاط ( <code>{g['total']}</code> ن )\n"
+                msg += f"{g['players_text']}\n"
+                msg += "  ┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅\n"
+
                 medal = "🥇 :" if i == 1 else "🥈 :" if i == 2 else "🥉 :" if i == 3 else "🔹 :"
                 
                 win_status = " ✨ [+1 🏆 : فوز]" if is_winner else ""
