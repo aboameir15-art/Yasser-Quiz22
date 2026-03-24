@@ -3733,7 +3733,7 @@ async def show_quizzes(obj):
 # ==========================================
 # [2] المحرك الأمني ولوحة التحكم (التشطيب النهائي المصلح)
 # ==========================================
-@dp.callback_query_handler(lambda c: c.data.startswith(('run_', 'close_', 'confirm_del_', 'final_del_', 'edit_time_', 'manage_quiz_', 'quiz_settings_', 'set_c_', 'set_t_', 'toggle_speed_', 'toggle_scope_', 'toggle_hint_', 'toggle_style_', 'save_quiz_process_')), state="*")
+@dp.callback_query_handler(lambda c: c.data.startswith(('run_', 'close_', 'confirm_del_', 'final_del_', 'toggle_time_', 'toggle_count_', 'manage_quiz_', 'quiz_settings_', 'set_c_', 'set_t_', 'toggle_speed_', 'toggle_scope_', 'toggle_hint_', 'toggle_style_', 'save_quiz_process_')), state="*")
 async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
     try:
         data_parts = c.data.split('_')
@@ -3815,28 +3815,35 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             return
 
         # 3️⃣ محرك التبديلات المطور (نسخة الإصلاح النهائي 2026)
-        # 3️⃣ محرك التبديلات المطور (تحديث 2026 - نظام التدوير)
         elif any(c.data.startswith(x) for x in ['toggle_hint_', 'toggle_speed_', 'toggle_scope_', 'toggle_style_', 'toggle_count_', 'toggle_time_']):
             quiz_id = data_parts[2]
             
             # 📊 تدوير عدد الأسئلة (10 إلى 80)
-            if 'togglecount_' in c.data:
-                counts = ["10", "15", "20", "25", "30", "35", "40", "50", "60", "70", "80"]
+            if 'toggle_count_' in c.data:
+                counts = [10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80]
                 res = supabase.table("saved_quizzes").select("questions_count").eq("id", quiz_id).single().execute()
-                curr = res.data.get('questions_count', "10")
+                curr = res.data.get('questions_count', 10)
                 next_val = counts[(counts.index(curr) + 1) % len(counts)] if curr in counts else 10
                 supabase.table("saved_quizzes").update({"questions_count": next_val}).eq("id", quiz_id).execute()
                 await c.answer(f"📊 الأسئلة: {next_val}")
 
             # ⏱️ تدوير الوقت (10 إلى 60)
-            elif c.data.startswith('edit_time_'):
-            quiz_id = data_parts[2]
-            res = supabase.table("saved_quizzes").select("time_limit").eq("id", quiz_id).single().execute()
-            curr = res.data.get('time_limit', 15)
-            next_t = 20 if curr == 15 else (30 if curr == 20 else (45 if curr == 30 else 15))
-            supabase.table("saved_quizzes").update({"time_limit": next_t}).eq("id", quiz_id).execute()
-            c.data = f"quiz_settings_{quiz_id}_{user_id}"
-            return await handle_secure_actions(c, state)
+            elif 'toggle_time_' in c.data:
+                times = [10, 15, 20, 30, 45, 60]
+                res = supabase.table("saved_quizzes").select("time_limit").eq("id", quiz_id).single().execute()
+                curr = res.data.get('time_limit', 15)
+                next_val = times[(times.index(curr) + 1) % len(times)] if curr in times else 15
+                supabase.table("saved_quizzes").update({"time_limit": next_val}).eq("id", quiz_id).execute()
+                await c.answer(f"⏱️ الوقت: {next_val}ث")
+
+            # 🎨 تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
+            elif 'toggle_style_' in c.data:
+                styles = ["اختيارات 📊", "مباشرة ⚡", "الكل 📋"]
+                res = supabase.table("saved_quizzes").select("quiz_style").eq("id", quiz_id).single().execute()
+                curr = res.data.get('quiz_style', "اختيارات 📊")
+                next_val = styles[(styles.index(curr) + 1) % len(styles)] if curr in styles else "اختيارات 📊"
+                supabase.table("saved_quizzes").update({"quiz_style": next_val}).eq("id", quiz_id).execute()
+                await c.answer(f"🎨 العرض: {next_val}")
                                                     
             # 🎨 تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
             elif 'toggle_style_' in c.data:
