@@ -3791,9 +3791,9 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 # زر تدوير عدد الأسئلة
                 InlineKeyboardButton(f"📊 الأسئلة: {q_count}", callback_data=f"togglecount_{quiz_id}_{user_id}"),
                 # زر تدوير الوقت
-                InlineKeyboardButton(f"⏱️ الوقت: {q_time}ث", callback_data=f"toggletime_{quiz_id}_{user_id}")
-            )
-
+                 
+                InlineKeyb
+                InlineKeyboardButton(f"⏱️ الوقت: {q_time}ث", callback_data=f"edit_time_{quiz_id}_{user_id}"))
             # زر تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
             kb.row(InlineKeyboardButton(f"🎨 العرض: {q_style}", callback_data=f"toggle_style_{quiz_id}_{user_id}"))
 
@@ -3829,14 +3829,15 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 await c.answer(f"📊 الأسئلة: {next_val}")
 
             # ⏱️ تدوير الوقت (10 إلى 60)
-            elif 'toggletime_' in c.data:
-                times = ["10", "15", "20", "30", "45", "60"]
-                res = supabase.table("saved_quizzes").select("time_limit").eq("id", quiz_id).single().execute()
-                curr = res.data.get('time_limit', "15")
-                next_val = times[(times.index(curr) + 1) % len(times)] if curr in times else 15
-                supabase.table("saved_quizzes").update({"time_limit": next_val}).eq("id", quiz_id).execute()
-                await c.answer(f"⏱️ الوقت: {next_val}ث")
-                            
+            elif c.data.startswith('edit_time_'):
+            quiz_id = data_parts[2]
+            res = supabase.table("saved_quizzes").select("time_limit").eq("id", quiz_id).single().execute()
+            curr = res.data.get('time_limit', 15)
+            next_t = 20 if curr == 15 else (30 if curr == 20 else (45 if curr == 30 else 15))
+            supabase.table("saved_quizzes").update({"time_limit": next_t}).eq("id", quiz_id).execute()
+            c.data = f"quiz_settings_{quiz_id}_{user_id}"
+            return await handle_secure_actions(c, state)
+                                                    
             # 🎨 تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
             elif 'toggle_style_' in c.data:
                 styles = ["اختيارات 📊", "مباشرة ⚡", "الكل 📋"]
