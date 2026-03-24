@@ -3814,30 +3814,33 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             await c.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
             return
 
-        # 3️⃣ محرك التبديلات المطور (تحديث 2026 - نظام التدوير)
-        elif any(c.data.startswith(x) for x in ['toggle_hint_', 'toggle_speed_', 'toggle_scope_', 'toggle_style_', 'toggle_count_', 'toggle_time_']):
-            # استخراج البيانات بدقة
+        # 3️⃣ محرك التبديلات المطور (نسخة الإصلاح النهائي 2026)
+        elif any(c.data.startswith(x) for x in ['toggle_count_', 'toggle_time_']):
             data_parts = c.data.split('_')
             quiz_id = data_parts[2]
             user_id = data_parts[3]
-
-            # 📊 [1] تدوير عدد الأسئلة (10 إلى 80)
+            
+            # 📊 تدوير عدد الأسئلة
             if c.data.startswith('toggle_count_'):
                 counts = [10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80]
                 res = supabase.table("saved_quizzes").select("questions_count").eq("id", quiz_id).single().execute()
-                curr = res.data.get('questions_count', 10)
-                next_val = counts[(counts.index(curr) + 1) % len(counts)] if curr in counts else 10
-                supabase.table("saved_quizzes").update({"questions_count": next_val}).eq("id", quiz_id).execute()
-                await c.answer(f"📊 الأسئلة: {next_val}")
+                if res.data:
+                    curr = int(res.data.get('questions_count', 10))
+                    next_val = counts[(counts.index(curr) + 1) % len(counts)] if curr in counts else 10
+                    # 🛡️ إرسال القيمة كـ int قسراً لضمان قبول سوبابيس
+                    supabase.table("saved_quizzes").update({"questions_count": int(next_val)}).eq("id", quiz_id).execute()
+                    await c.answer(f"📊 الأسئلة: {next_val}")
 
-            # ⏱️ [2] تدوير الوقت (10 إلى 60)
+            # ⏱️ تدوير الوقت
             elif c.data.startswith('toggle_time_'):
                 times = [10, 15, 20, 30, 45, 60]
                 res = supabase.table("saved_quizzes").select("time_limit").eq("id", quiz_id).single().execute()
-                curr = res.data.get('time_limit', 15)
-                next_val = times[(times.index(curr) + 1) % len(times)] if curr in times else 15
-                supabase.table("saved_quizzes").update({"time_limit": next_val}).eq("id", quiz_id).execute()
-                await c.answer(f"⏱️ الوقت: {next_val}ث")
+                if res.data:
+                    curr = int(res.data.get('time_limit', 15))
+                    next_val = times[(times.index(curr) + 1) % len(times)] if curr in times else 15
+                    # 🛡️ إرسال القيمة كـ int قسراً
+                    supabase.table("saved_quizzes").update({"time_limit": int(next_val)}).eq("id", quiz_id).execute()
+                    await c.answer(f"⏱️ الوقت: {next_val}ث")
        
             # 🎨 تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
             elif 'toggle_style_' in c.data:
@@ -3869,10 +3872,10 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 supabase.table("saved_quizzes").update({"mode": new_val}).eq("id", quiz_id).execute()
                 await c.answer(f"🔖 النظام: {new_val}")
 
-            # تحديث الواجهة تلقائياً
-            c.data = f"quiz_settings_{quiz_id}_{user_id}"
+            # 🔄 تحديث الواجهة فوراً (ليظهر الرقم الجديد في الزر)
+            c.data = f"quiz_settings_{user_id}_{quiz_id}"
             return await handle_secure_actions(c, state)
-
+        
         # 4️⃣ الحفظ والعمليات النهائية (تبدأ من السطر 8 كما طلبت)
         elif c.data.startswith('save_quiz_process_'):
             quiz_id = data_parts[3] 
