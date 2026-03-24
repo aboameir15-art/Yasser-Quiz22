@@ -731,30 +731,27 @@ async def send_broadcast_final_results(chat_id, scores, total_q, group_names=Non
             for i, (uid, p) in enumerate(sorted_global[:5], 1):
                 icon = "🥇 :" if i == 1 else "🥈 :" if i == 2 else "🥉 :" if i == 3 else "👤 :"
                 
-                # 🧠 [ إصلاح معادلة الذكاء ]
-                # النقاط / 10 تعطينا عدد الإجابات الصحيحة (لأن كل إجابة بـ 10 نقاط)
-                correct_answers = p['points'] / 10
-                if total_q > 0:
-                    # النسبة المئوية للإجابات الصحيحة من إجمالي الأسئلة
-                    iq_ratio = (correct_answers / total_q) * 100
-                    # ذكاء يبدأ من 50 وينتهي بـ 100 حسب دقة الإجابات
-                    iq = min(int(iq_ratio) + 50, 100) 
+                # الحد الأدنى للذكاء يبدأ من 30% لزيادة حدة المنافسة
+                max_possible_pts = total_q * 110
+                if max_possible_pts > 0:
+                    # نسبة الأداء (السرعة + الدقة) مضروبة في 70 لضبط المتبقي
+                    performance_ratio = (p['points'] / max_possible_pts) * 70
+                    # النتيجة تبدأ من 30 وتصل لـ 100 كحد أقصى
+                    iq = min(int(performance_ratio) + 30, 100)
                 else:
-                    iq = 50
+                    iq = 30
 
                 # 🛡️ [ فحص الخصوصية لملوك العالم ]
                 try:
-                    # نحتاج UID رقمي للفحص
                     user_info = await bot.get_chat(int(uid))
                     is_female = await deep_privacy_scan(user_info, bot)
                 except:
                     is_female = False
 
-                # حماية الرابط مع الحفاظ على الاسم الأصلي
+                # حماية الرابط مع الحفاظ على الاسم الأصلي المزخرف
                 if is_female:
                     p_link = f"<b>{p['name']}</b>"
                 else:
-                    # استخدمنا " للخارج لكي نقدر نستخدم ' للداخل بدون مشاكل
                     p_link = f'<a href="tg://user?id={uid}">{p["name"]}</a>'
 
                 msg += f"{icon} {p_link} ⇠ <b>{p['points']}</b> ن (🧠 {iq}% IQ)\n"
