@@ -3789,11 +3789,10 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             # --- [ أزرار التدوير الذكية ] ---
             kb.row(
                 # زر تدوير عدد الأسئلة
-                InlineKeyboardButton(f"📊 الأسئلة: {q_count}", callback_data=f"togglecount_{quiz_id}_{user_id}"),
+                InlineKeyboardButton(f"📊 الأسئلة: {q_count}", callback_data=f"toggle_count_{quiz_id}_{user_id}"),
                 # زر تدوير الوقت
-                 
-                InlineKeyb
-                InlineKeyboardButton(f"⏱️ الوقت: {q_time}ث", callback_data=f"edit_time_{quiz_id}_{user_id}"))
+                InlineKeyboardButton(f"⏱️ الوقت: {q_time}ث", callback_data=f"toggle_time_{quiz_id}_{user_id}")
+            )
             # زر تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
             kb.row(InlineKeyboardButton(f"🎨 العرض: {q_style}", callback_data=f"toggle_style_{quiz_id}_{user_id}"))
 
