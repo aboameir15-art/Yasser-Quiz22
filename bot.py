@@ -844,26 +844,21 @@ async def send_final_results2(chat_id, overall_scores, total_q):
             icon = medals[i] if i < 5 else "👤 :"
             
             # 🧠 [ حساب IQ الجولة المسبوك - يبدأ من 30% ]
-            # أقصى نقاط ممكنة (110 ن × عدد الأسئلة)
+            # أقصى نقاط ممكنة (110 ن × عدد الأسئلة) بناءً على نظام السرعة
             max_possible_pts = total_q * 110 
             if max_possible_pts > 0:
                 # نسبة الأداء مضروبة في 70 لضبط الميزان مع البداية من 30
-                performance_ratio = (player['points'] / max_possible_pts) * 70
+                performance_ratio = (player.get('points', 0) / max_possible_pts) * 70
                 round_iq = min(int(performance_ratio) + 30, 100)
             else:
                 round_iq = 30
-
-            # 🔗 رابط المستخدم المباشر (باستخدام المعرف المكتشف)
-            if p_id:
-                user_link = f'<a href="tg://user?id={p_id}">{p_name}</a>'
-            else:
-                user_link = f"<b>{p_name}</b>"
-            # جلب المعرف بأكثر من طريقة لمنع خطأ الـ KeyError
-            p_id = player.get('id') or player.get('user_id') or player.get('uid')
+            
+            # جلب الاسم بأمان لمنع أي خطأ KeyError
             p_name = player.get('name', 'لاعب مجهول')
-            # السطر الذهبي (عرض النتائج)
-            msg += f"{icon} {user_link}\n"
-            msg += f"🏅 <b>:</b> المركز ( {i+1} ) ⇠ <b>{player['points']}</b> ن\n"
+            
+            # السطر الذهبي (بدون منشن - اسم فقط عريض)
+            msg += f"{icon} <b>{p_name}</b>\n"
+            msg += f"🏅 <b>:</b> المركز ( {i+1} ) ⇠ <b>{player.get('points', 0)}</b> ن\n"
             msg += f"🧠 <b>:</b> ذكاء الجولة ⇠ <code>{round_iq}% IQ</code>\n"
             
             # تمييز بطل المسابقة الخاصة
@@ -872,10 +867,12 @@ async def send_final_results2(chat_id, overall_scores, total_q):
                 
             msg += "  ┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅\n"
 
-        # 📊 ذيل القالب
+        # 📊 ذيل القالب المحسن
         msg += "\n📊 <b>: إحـصـائـيـات الـتـفـاعـل</b>\n"
         msg += f"📋 <b>:</b> إجمالي الأسئلة ⇠ ( <b>{total_q}</b> )\n"
-        msg += f"👥 <b>:</b> عدد المشاركين ⇠ ( <b>{len(overall_scores)}</b> )\n"
+        # تأكد من استخدام اسم المتغير الصحيح لإجمالي اللاعبين لديك (مثلاً overall_scores)
+        total_players = len(overall_scores) if 'overall_scores' in locals() else len(sorted_players)
+        msg += f"👥 <b>:</b> عدد المشاركين ⇠ ( <b>{total_players}</b> )\n"
         msg += "  ━━━━━━━━━━━━━━━━━━━\n"
         msg += "❤️ <b>: تهانينا للفائزين وحظاً أوفر للبقية</b>\n"
         msg += "✅ <b>: تم ترحيل الألقاب والجوائز بنجاح</b>"
@@ -885,7 +882,7 @@ async def send_final_results2(chat_id, overall_scores, total_q):
     except Exception as e:
         import logging
         logging.error(f"❌ خطأ في العملية السابقة: {e}")
-
+        
 # ============================================================
 # 1. دوال النظام الذكي (الرتب، التخصصات، الحسابات)
 # ============================================================
