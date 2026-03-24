@@ -706,25 +706,12 @@ async def send_broadcast_final_results(chat_id, scores, total_q, group_names=Non
                 'players_text': "\n".join(group_players_list)
             })
 
-        # --- [ 2. عرض المجموعات مع ترتيب الرموز ] ---
-        # --- [ 2. عرض المجموعات مع ترتيب الرموز ] ---
+        # --- [ 2. عرض المجموعات مع ترتيب الرموز ] ---  
         if group_summary:
-            # ترتيب المجموعات حسب إجمالي النقاط
             sorted_groups = sorted(group_summary, key=lambda x: x['total'], reverse=True)
             
             for i, g in enumerate(sorted_groups, 1):
-                # تحديد الرمز بناءً على الترتيب
-                medal = "🥇 :" if i == 1 else "🥈 :" if i == 2 else "🥉 :" if i == 3 else "🔹 :"
-                
-                # تعريف الحالة (هل هي الفائزة؟) لإضافة وسام الفوز
-                win_status = " ✨ [+1 🏆 : فوز]" if i == 1 else ""
-                
-                msg += f"{medal} <b>{g['name']}</b> {win_status}\n"
-                msg += f"📊 : إجمالي النقاط ( <code>{g['total']}</code> ن )\n"
-                msg += f"{g['players_text']}\n"
-                msg += "  ┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅\n"
-
-
+                is_winner = (i == 1)
                 medal = "🥇 :" if i == 1 else "🥈 :" if i == 2 else "🥉 :" if i == 3 else "🔹 :"
                 
                 win_status = " ✨ [+1 🏆 : فوز]" if is_winner else ""
