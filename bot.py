@@ -5851,36 +5851,36 @@ async def self_ping():
         await asyncio.sleep(600)
 
 if __name__ == '__main__':
-    # 3️⃣ إعدادات السجلات (اللوج) - فتحنا "الحنفية" عشان نشوف النبض
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-
-    # 4️⃣ إعداد سيرفر ويب صغير في الخلفية (Keep-Alive)
-    app = web.Application()
-    app.router.add_get('/', handle_ping)
+    # 1. إعداد اللوج بشكل فوري
+    logging.basicConfig(level=logging.INFO)
     
-    # الحصول على الـ loop الحالي بشكل آمن
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
+    # 2. تشغيل سيرفر الويب في "خيط" مستقل (Background Thread)
+    def start_background_web():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        
+        app = web.Application()
+        app.router.add_get('/', handle_ping)
+        
+        runner = web.AppRunner(app)
+        loop.run_until_complete(runner.setup())
+        
+        port = int(os.environ.get("PORT", 10000))
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        
+        loop.create_task(site.start())
+        loop.create_task(self_ping()) # المنبه الداخلي
+        print(f"🚀 Keep-alive Thread Started on Port {port}")
+        loop.run_forever()
 
-    runner = web.AppRunner(app)
-    loop.run_until_complete(runner.setup())
-    
-    # تحديد المنفذ (Render يستخدم 10000 غالباً)
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    
-    # 5️⃣ تشغيل "المهام الجانبية" (سيرفر الويب + المنبه الداخلي)
-    loop.create_task(site.start())
-    loop.create_task(self_ping()) # 👈 هذي هي "حقنة الكافيين" للبوت
-    
-    print(f"✅ Keep-alive system started on port {port}")
-    print("🤖 Bot is now polling... Happy Trading!")
+    # تشغيل الخيط الجانبي
+    from threading import Thread
+    Thread(target=start_background_web, daemon=True).start()
 
-    # 6️⃣ بدء استقبال الرسائل (السطر الأخير دائماً)
-    executor.start_polling(dp, skip_updates=True)
+    # 3. تشغيل البوت (العملية الأساسية)
+    print("🤖 Bot is starting polling...")
+    try:
+        executor.start_polling(dp, skip_updates=True)
+    except Exception as e:
+        logging.critical(f"❌ البوت توقف لسبب تقني: {e}")
+        
