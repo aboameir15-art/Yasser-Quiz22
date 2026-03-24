@@ -5827,14 +5827,21 @@ async def self_ping():
     await asyncio.sleep(30)
     while True:
         try:
-            # Render يعطيك رابط موقعك تلقائياً في هذا المتغير
+            # التعديل الصحيح: المتغير أحياناً يأتي بالدومين كامل
             app_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
             if app_host:
-                app_url = f"https://{app_host}.onrender.com/"
+                # إذا كان الاسم يحتوي على "onrender.com" نستخدمه مباشرة، وإذا لا نضيفها
+                if "onrender.com" in app_host:
+                    app_url = f"https://{app_host}/"
+                else:
+                    app_url = f"https://{app_host}.onrender.com/"
+                
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(app_url) as response:
+                    # إضافة timeout بسيط عشان ما يعلق البوت لو السيرفر ثقيل
+                    async with session.get(app_url, timeout=10) as response:
                         if response.status == 200:
-                            logging.info("📍 [Self-Ping] تم نغز البوت داخلياً.. مستيقظ وجاهز! ✅")
+                            logging.info("📍 [Self-Ping] تم نغز البوت بنجاح! ✅")
+                            
             else:
                 logging.warning("⚠️ لم يتم العثور على RENDER_EXTERNAL_HOSTNAME")
         except Exception as e:
