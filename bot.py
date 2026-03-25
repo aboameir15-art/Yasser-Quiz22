@@ -4097,8 +4097,13 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             u_name = c.from_user.first_name
 
             # 1️⃣ [ فحص نوع المحادثة ] - منع الخاص فوراً
-            if c.message.chat.type == 'private':
-                return await c.answer("❌ عفواً أيها الطالب! الإذاعة العامة متاحة فقط داخل القاعات (المجموعات) المعتمدة. توجه لمجموعة مفعلة المباشرة.", show_alert=True)
+            # --- [ 1. فحص نوع المحادثة ] ---
+        is_private = c.message.chat.type == 'private'
+        
+        # إذا كانت المسابقة "عامة" (نظام فرسان/مجموعات) وهي في الخاص:
+        if is_private and is_public: 
+                return await c.answer("⚠️ الإذاعة العامة وتنافس المجموعات يتطلب وجودك داخل مجموعة! يمكنك بدء مسابقة فردية هنا.", show_alert=True)
+
 
             # 2️⃣ [ فحص حالة المجموعة في HUB ]
             is_active_group = False
