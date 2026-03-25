@@ -191,8 +191,13 @@ def get_hybrid_poll_style(q_data, current_index, total_q, cat_name):
 # ==========================================
 # 5. دالة المايسترو (بنظام الـ Poll الهجين)
 # ==========================================
+# ==========================================
 async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, all_questions_list):
+    # 🏁 [ صمام أمان أثير ]: تعريف المتغير قبل الـ try لضمان وجوده دائماً
+    start_q_time = datetime.now()
+
     try:
+        # ⬅️ المسافة هنا 8 (تبدأ من أول فراغ داخل الـ try)
         style = settings.get('quiz_style', 'اختيارات 📊')
         quiz_db_id = settings.get('quiz_db_id')
         
@@ -200,8 +205,8 @@ async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, al
         correct_ans = str(q_data.get('correct_answer', "")).strip()
         cat_name = settings.get('cat_name', 'عام')
         
-        # ⏱️ جلب وقت الانطلاق الموحد من المحرك (أو استخدامه الآن كخيار بديل)
-        start_q_time = settings.get('start_q_time', datetime.now())
+        # ⏱️ جلب وقت الانطلاق الموحد من المحرك
+        start_q_time = settings.get('start_q_time', start_q_time)
 
         if style == "اختيارات 📊":
             clean_q_text = re.sub(r'[؟!؟\.،,:]', '', raw_q_text)
@@ -238,12 +243,15 @@ async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, al
             return quiz_msg
 
         else:
-            # النمط النصي: نمرر التوقيت أيضاً في الـ settings (للرادار النصي)
+            # النمط النصي: نمرر التوقيت أيضاً في الـ settings
             settings['start_q_time'] = start_q_time 
             return await send_quiz_question(chat_id, q_data, current_num, total_num, settings)
 
     except Exception as e:
+        # ⬅️ المسافة هنا 8 (داخل الـ except)
         await send_log("Master_Engine_Error", str(e), chat_id)
+        # نضمن تمرير start_q_time حتى في حالة الخطأ لتجنب الانهيار في الدالة التالية
+        settings['start_q_time'] = start_q_time
         return await send_quiz_question(chat_id, q_data, current_num, total_num, settings)
 # ==========================================
 # --- [ دالة تسجيل الإجابة في سوبابيس المحدثة ] ---
