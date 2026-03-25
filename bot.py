@@ -106,36 +106,35 @@ async def safe_database_cleaner():
         await asyncio.sleep(3600) # يفحص كل ساعة مرة واحدة فقط
         
         
-   
 async def send_log(error_type, error_details, chat_id=None, user_id=None):
-    """
-    إرسال تقرير خطأ مفصل إلى الوجهة المشفرة (LOG_GROUP_ID)
-    """
-    try:
-        if not LOG_GROUP_ID:
-            logging.error("⚠️ LOG_GROUP_ID غير معرف. تأكد من إعدادات ريندر.")
-            return
+        """
+        إرسال تقرير خطأ مفصل إلى الوجهة المشفرة (LOG_GROUP_ID)
+        """
+        try:
+                if not LOG_GROUP_ID:
+                        logging.error("⚠️ LOG_GROUP_ID غير معرف. تأكد من إعدادات ريندر.")
+                        return
 
-        # تجهيز نص الرسالة بتنسيق احترافي
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        report_msg = (
-            f"🚀 **تقرير رادار الأخطاء**\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"📅 **الوقت:** `{now}`\n"
-            f"🚨 **النوع:** `{error_type}`\n"
-            f"📍 **الموقع:** `{chat_id if chat_id else 'نظام داخلي'}`\n"
-            f"👤 **المستخدم:** `{user_id if user_id else 'غير معروف'}`\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🔍 **التفاصيل:**\n"
-            f"`{error_details}`"
-        )
+                # التصحيح المباشر للوقت
+                import datetime as dt
+                now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                report_msg = (
+                        f"🚀 **تقرير رادار الأخطاء**\n"
+                        f"━━━━━━━━━━━━━━━\n"
+                        f"📅 **الوقت:** `{now}`\n"
+                        f"🚨 **النوع:** `{error_type}`\n"
+                        f"📍 **الموقع:** `{chat_id if chat_id else 'نظام داخلي'}`\n"
+                        f"👤 **المستخدم:** `{user_id if user_id else 'غير معروف'}`\n"
+                        f"━━━━━━━━━━━━━━━\n"
+                        f"🔍 **التفاصيل:**\n"
+                        f"`{error_details}`"
+                )
 
-        # إرسال التقرير فوراً
-        await bot.send_message(LOG_GROUP_ID, report_msg, parse_mode="Markdown")
-        
-    except Exception as e:
-        logging.error(f"❌ فشل إرسال التقرير للرادار: {e}")
+                await bot.send_message(LOG_GROUP_ID, report_msg, parse_mode="Markdown")
+                
+        except Exception as e:
+                logging.error(f"❌ فشل إرسال التقرير للرادار: {e}")
 
 
 # ==========================================
