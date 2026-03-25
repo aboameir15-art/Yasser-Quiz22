@@ -4188,13 +4188,12 @@ async def engine_bot_questions(chat_id, quiz_data, owner_name):
 
         count = int(quiz_data.get('questions_count', 10))
 
-        # 🚀 [تعديل المطور الصديق]: الجلب الذكي (Limit) وتحديد الأعمدة لتوفير الرام
-        # سحبنا الأعمدة اللي نحتاجها بس وحددنا العدد عشان ما نسحب الجدول كله
+        # --- [ تحديث استعلام الأسئلة: تصحيح العمود + مسافة 8 ] ---
         res = supabase.table("bot_questions") \
-            .select("id, question, options, answer, bot_category_id") \
-            .in_("bot_category_id", cat_ids) \
-            .limit(count + 50) \
-            .execute()
+                .select("id, question:question_content, options, answer, bot_category_id") \
+                .in_("bot_category_id", cat_ids) \
+                .limit(count + 50) \
+                .execute()
 
         if not res.data:
             return await bot.send_message(chat_id, "⚠️ لم أجد أسئلة في جدول البوت.")
@@ -4361,7 +4360,8 @@ async def delete_after(message, delay):
         await message.delete()
     except Exception: 
         pass
-# ==========================================
+
+  # ==========================================
 # [2] المحرك الموحد (نسخة التشطيب الرسمي @QuizBot + العداد المطور)
 # ==========================================
 async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_type):
