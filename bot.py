@@ -4164,14 +4164,15 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
         except: 
             pass
         
+
+
 # ==========================================
-# 3. نظام المحركات المنفصلة (ياسر المطور - نسخة التوربو)
+# 3. نظام المحركات المنفصلة (ياسر المطور - نسخة عشوائية)
 # ==========================================
 
 # --- [1. محرك أسئلة البوت] ---
 async def engine_bot_questions(chat_id, quiz_data, owner_name):
     try:
-        # معالجة الأقسام (نفس منطقك الجميل لكن أكثر استقراراً)
         raw_cats = quiz_data.get('cats', [])
         if isinstance(raw_cats, str):
             try:
@@ -4185,20 +4186,15 @@ async def engine_bot_questions(chat_id, quiz_data, owner_name):
         if not cat_ids:
             return await bot.send_message(chat_id, "⚠️ خطأ: لم يتم العثور على أقسام صالحة.")
 
-        count = int(quiz_data.get('questions_count', 10))
-
-        # --- [ تحديث استعلام الأسئلة: تصحيح العمود + مسافة 8 ] ---
-        res = supabase.table("bot_questions") \
-                .select("id, question:question_content, options, answer, bot_category_id") \
-                .in_("bot_category_id", cat_ids) \
-                .limit(count + 50) \
-                .execute()
-
+        # جلب الأسئلة وخلطها عشوائياً
+        res = supabase.table("bot_questions").select("*").in_("bot_category_id", cat_ids).execute()
         if not res.data:
             return await bot.send_message(chat_id, "⚠️ لم أجد أسئلة في جدول البوت.")
 
-        # خلط عشوائي سريع في الذاكرة لعدد قليل جداً من الأسئلة
-        selected_questions = random.sample(res.data, min(len(res.data), count))
+        questions_pool = res.data
+        random.shuffle(questions_pool)
+        count = int(quiz_data.get('questions_count', 10))
+        selected_questions = questions_pool[:count]
 
         await run_universal_logic(chat_id, selected_questions, quiz_data, owner_name, "bot")
     except Exception as e:
@@ -4220,26 +4216,20 @@ async def engine_user_questions(chat_id, quiz_data, owner_name):
         if not cat_ids:
             return await bot.send_message(chat_id, "⚠️ خطأ في أقسام الأعضاء.")
 
-        count = int(quiz_data.get('questions_count', 10))
-
-        # 🚀 [تعديل المطور الصديق]: جلب الأعمدة الضرورية مع ربط القسم
-        res = supabase.table("questions") \
-            .select("id, question, options, answer, category_id, categories(name)") \
-            .in_("category_id", cat_ids) \
-            .limit(count + 50) \
-            .execute()
-
+        # جلب الأسئلة وخلطها عشوائياً
+        res = supabase.table("questions").select("*, categories(name)").in_("category_id", cat_ids).execute()
         if not res.data:
             return await bot.send_message(chat_id, "⚠️ لم أجد أسئلة في أقسام الأعضاء.")
 
-        # اختيار عشوائي ذكي (أخف من shuffle للبيانات الضخمة)
-        selected_questions = random.sample(res.data, min(len(res.data), count))
+        questions_pool = res.data
+        random.shuffle(questions_pool)
+        count = int(quiz_data.get('questions_count', 10))
+        selected_questions = questions_pool[:count]
 
         await run_universal_logic(chat_id, selected_questions, quiz_data, owner_name, "user")
     except Exception as e:
         logging.error(f"User Engine Error: {e}")
-
-
+        
 # --- [ محرك التلميحات الملكي المطور: 3 قلوب + ذاكرة سحابية ✨ ] ---
 
 current_key_index = 0 # متغير تدوير المفاتيح
