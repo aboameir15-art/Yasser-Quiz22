@@ -34,26 +34,9 @@ from supabase import create_client, Client
 ADMIN_ID = int(os.getenv('ADMIN_ID', 7988144062)) 
 OWNER_USERNAME = os.getenv('OWNER_USERNAME', "@Ya_79k")
 
-# --- [ 2. نظام رادار الأخطاء المشفر ] ---
-# نسحب النص المشفر من متغيرات البيئة في Render
-# القيمة المتوقعة في ريندر هي: MzcwMjAzMzk1Ng==
-RAW_LOG_ID_ENC = os.getenv('LOG_GROUP_ID_ENC')
-
-def decrypt_log_id(enc_val):
-    """فك تشفير معرف الجروب من Base64 إلى رقم Integer"""
-    try:
-        if enc_val:
-            # عملية فك التشفير الليزرية
-            decoded_bytes = base64.b64decode(enc_val)
-            return int(decoded_bytes.decode('utf-8'))
-    except Exception as e:
-        logging.error(f"❌ خطأ في فك تشفير LOG_GROUP_ID: {e}")
-    return None
-
-# القيمة النهائية التي سيستخدمها البوت في الإرسال (ستكون 3702033956)
-LOG_GROUP_ID = decrypt_log_id(RAW_LOG_ID_ENC)
-
 # --- [ 3. سحب التوكينات والقلوب الثلاثة ] ---
+# --- [ 2. تعريف الهوية والمسارات ] ---
+LOG_GROUP_ID = os.getenv('LOG_GROUP_ID')
 API_TOKEN = os.getenv('BOT_TOKEN')
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
