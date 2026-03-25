@@ -191,9 +191,8 @@ def get_hybrid_poll_style(q_data, current_index, total_q, cat_name):
 # ==========================================
 # 5. دالة المايسترو (بنظام الـ Poll الهجين)
 # ==========================================
-# ==========================================
 async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, all_questions_list):
-    # 🏁 [ صمام أمان أثير ]: تعريف المتغير قبل الـ try لضمان وجوده دائماً
+    # 🏁 [ صمام أمان أثير ]: التعريف هنا بمسافة 4 لضمان رؤيته في كل مكان
     start_q_time = datetime.now()
 
     try:
@@ -205,7 +204,7 @@ async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, al
         correct_ans = str(q_data.get('correct_answer', "")).strip()
         cat_name = settings.get('cat_name', 'عام')
         
-        # ⏱️ جلب وقت الانطلاق الموحد من المحرك
+        # تحديث التوقيت من الإعدادات إذا كان مرسلاً
         start_q_time = settings.get('start_q_time', start_q_time)
 
         if style == "اختيارات 📊":
@@ -228,7 +227,7 @@ async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, al
                 explanation=f"بواسطة: {settings.get('owner_name', 'المشرف')}"
             )
 
-            # 🔥 [ الوصلة الذهبية المحدثة ]: نستخدم التوقيت الموحد start_q_time
+            # 🔥 استخدام التوقيت الموحد لضمان العدالة
             active_polls[quiz_msg.poll.id] = {
                 "db_quiz_id": quiz_db_id,
                 "chat_id": chat_id,
@@ -237,22 +236,22 @@ async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, al
                 "correct_text": correct_ans,
                 "current_num": current_num,
                 "total_num": total_num,
-                "start_time": start_q_time, # 👈 لضمان العدالة بين المجموعات
+                "start_time": start_q_time,
                 "q_id": q_data.get('id')
             }
             return quiz_msg
 
         else:
-            # النمط النصي: نمرر التوقيت أيضاً في الـ settings
+            # النمط النصي
             settings['start_q_time'] = start_q_time 
             return await send_quiz_question(chat_id, q_data, current_num, total_num, settings)
 
     except Exception as e:
         # ⬅️ المسافة هنا 8 (داخل الـ except)
-        await send_log("Master_Engine_Error", str(e), chat_id)
-        # نضمن تمرير start_q_time حتى في حالة الخطأ لتجنب الانهيار في الدالة التالية
+        await send_log("Master_Engine_Error", f"Error: {str(e)}\nTime: {start_q_time}", chat_id)
         settings['start_q_time'] = start_q_time
         return await send_quiz_question(chat_id, q_data, current_num, total_num, settings)
+# ==========================================
 # ==========================================
 # --- [ دالة تسجيل الإجابة في سوبابيس المحدثة ] ---
 # ==========================================
