@@ -4701,9 +4701,8 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
     for cid in all_chats:
         is_busy = (cid in active_broadcasts) or (cid in active_quizzes and active_quizzes[cid].get('active'))
         if is_busy:
-            logging.warning(f"
-لمجموعة {cid}: لديها مسابقة نشطة بالفعل.")
-            continue 
+            logging.warning(f"⚠️ تخطي المجموعة {cid}: لديها مسابقة نشطة بالفعل.")
+            continue  
             
         chats_to_broadcast.append(cid)
         active_broadcasts.add(cid) # حجز المجموعة في الذاكرة لمنع أي تداخل
