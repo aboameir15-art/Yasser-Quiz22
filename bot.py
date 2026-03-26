@@ -187,27 +187,21 @@ def get_hybrid_poll_style(q_data, current_index, total_q, cat_name):
     )
     
     return poll_title
-
 # ==========================================
 # 5. دالة المايسترو (بنظام الـ Poll الهجين)
 # ==========================================
 async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, all_questions_list):
-    # 🏁 [ صمام أمان أثير ]: التعريف هنا بمسافة 4 لضمان رؤيته في كل مكان
-    start_q_time = datetime.now()
-
     try:
-        # ⬅️ المسافة هنا 8 (تبدأ من أول فراغ داخل الـ try)
         style = settings.get('quiz_style', 'اختيارات 📊')
-        quiz_db_id = settings.get('quiz_db_id')
+        quiz_db_id = settings.get('quiz_db_id') # هذا هو ID المسابقة في سوبابيس
         
         raw_q_text = str(q_data.get('question_content', "")).strip()
         correct_ans = str(q_data.get('correct_answer', "")).strip()
         cat_name = settings.get('cat_name', 'عام')
-        
-        # تحديث التوقيت من الإعدادات إذا كان مرسلاً
-        start_q_time = settings.get('start_q_time', start_q_time)
 
+        # --- [ نمط الاختيارات الذكي ] ---
         if style == "اختيارات 📊":
+            # 1. تجهيز الخيارات بالرادار
             clean_q_text = re.sub(r'[؟!؟\.،,:]', '', raw_q_text)
             wrong_picks = await get_ultra_smart_options(clean_q_text, cat_name, correct_ans)
             
@@ -215,43 +209,44 @@ async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, al
             random.shuffle(final_options) 
             correct_id = final_options.index(correct_ans)
 
-            poll_title = f"[{current_num} من {total_num}] | {cat_name}\n\n❓ {raw_q_text}"
+            # 2. بناء نص السؤال المنسق
+            poll_title = f"[{current_num} من {total_num}]\nاختبار: {cat_name}\n\n❓ {raw_q_text}"
 
+            # 3. إرسال الـ Poll الفعلي
             quiz_msg = await bot.send_poll(
                 chat_id=chat_id,
                 question=poll_title,
                 options=final_options,
                 type='quiz',
                 correct_option_id=correct_id,
-                is_anonymous=False,
-                explanation=f"بواسطة: {settings.get('owner_name', 'المشرف')}"
+                is_anonymous=False, # ضروري جداً ليعرف البوت من الشخص الذي أجاب
+                explanation=f"✅ الإجابة الصحيحة هي: {correct_ans}"
             )
 
-            # 🔥 استخدام التوقيت الموحد لضمان العدالة
+            # 🔥 [ الوصلة الذهبية ] - توضع هنا مباشرة بعد الإرسال الناجح
+            # نستخدم poll.id كمفتاح لأنه الوحيد الذي يصلنا في الـ Handler
             active_polls[quiz_msg.poll.id] = {
-                "db_quiz_id": quiz_db_id,
-                "chat_id": chat_id,
-                "category": cat_name,
-                "correct_id": correct_id,
-                "correct_text": correct_ans,
-                "current_num": current_num,
-                "total_num": total_num,
-                "start_time": start_q_time,
-                "q_id": q_data.get('id')
+                "db_quiz_id": quiz_db_id,      # للربط بجدول active_quizzes
+                "chat_id": chat_id,           # لمعرفة المجموعة التي جاءت منها الإجابة
+                "category": cat_name,         # لتخزين القسم في answers_log
+                "correct_id": correct_id,     # لمقارنة إجابة اللاعب
+                "correct_text": correct_ans,   # لحفظ نص الإجابة
+                "current_num": current_num,   # رقم السؤال الحالي
+                "total_num": total_num,       # إجمالي الأسئلة
+                "start_time": datetime.now(), # لبدء عداد السرعة (الملي ثانية)
+                "q_id": q_data.get('id')      # آيدي السؤال من قاعدة البيانات
             }
+            
+            print(f"🚀 [رادار]: تم تفعيل مراقبة السؤال {current_num} للـ Poll: {quiz_msg.poll.id}")
             return quiz_msg
 
+        # --- [ الأنماط الأخرى: مباشر / كتابة ] ---
         else:
-            # النمط النصي
-            settings['start_q_time'] = start_q_time 
             return await send_quiz_question(chat_id, q_data, current_num, total_num, settings)
 
     except Exception as e:
-        # ⬅️ المسافة هنا 8 (داخل الـ except)
-        await send_log("Master_Engine_Error", f"Error: {str(e)}\nTime: {start_q_time}", chat_id)
-        settings['start_q_time'] = start_q_time
+        print(f"❌ Error in Master Engine: {e}")
         return await send_quiz_question(chat_id, q_data, current_num, total_num, settings)
-# ==========================================
 # ==========================================
 # --- [ دالة تسجيل الإجابة في سوبابيس المحدثة ] ---
 # ==========================================
