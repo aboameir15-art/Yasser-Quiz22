@@ -239,14 +239,32 @@ async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, al
             
             print(f"🚀 [رادار]: تم تفعيل مراقبة السؤال {current_num} للـ Poll: {quiz_msg.poll.id}")
             return quiz_msg
-
+        # --- [ الأنماط الأخرى: مباشر / كتابة ] ---
         # --- [ الأنماط الأخرى: مباشر / كتابة ] ---
         else:
+            # 🏁 [ صمام أمان أثير ]: تسجيل وقت البداية قبل الانتقال للدالة الفرعية
+            start_q_time = datetime.now()
+            
+            # تحديث الرادار الموحد لكي تعرفه دالة رصد الرسائل النصية
+            active_quizzes[chat_id] = {
+                'active': True,
+                'start_time': start_q_time,  # 👈 هذا السطر هو الذي يقتل الخطأ
+                'correct_answer': str(q_data.get('correct_answer', "")).strip(),
+                'current_num': current_num,
+                'total_num': total_num,
+                'winners': [],
+                'losers': []
+            }
+            
+            # نرسل السؤال الآن وهو "مراقب" في الرادار
             return await send_quiz_question(chat_id, q_data, current_num, total_num, settings)
 
     except Exception as e:
+        # تأمين وقت البداية حتى في حالة الخطأ
+        start_q_time = datetime.now()
         print(f"❌ Error in Master Engine: {e}")
         return await send_quiz_question(chat_id, q_data, current_num, total_num, settings)
+        
 # ==========================================
 # --- [ دالة تسجيل الإجابة في سوبابيس المحدثة ] ---
 # ==========================================
