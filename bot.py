@@ -4832,8 +4832,6 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 
             # 4️⃣ [ بث السؤال للعالم عبر المايسترو ]
             # 🔥 [ بصمة وقت انطلاق السؤال ] - تبدأ من هنا لحساب السرعة بدقة
-            start_q_time = datetime.now() 
-
             send_tasks = []
             for cid in chats_to_broadcast:
                 # نستخدم المايسترو بدلاً من send_quiz_question
