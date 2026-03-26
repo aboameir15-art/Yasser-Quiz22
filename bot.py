@@ -4701,7 +4701,8 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
     for cid in all_chats:
         is_busy = (cid in active_broadcasts) or (cid in active_quizzes and active_quizzes[cid].get('active'))
         if is_busy:
-            logging.warning(f"⚠️ تخطي المجموعة {cid}: لديها مسابقة نشطة بالفعل.")
+            logging.warning(f"
+لمجموعة {cid}: لديها مسابقة نشطة بالفعل.")
             continue 
             
         chats_to_broadcast.append(cid)
@@ -4781,8 +4782,8 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
         # --- [ د ] دورة البث الموحدة ---
         for i, q in enumerate(selected_questions):
+            start_q_time = datetime.now() 
             answered_users_global[i + 1] = [] 
-
             ans = str(q.get('correct_answer') or q.get('answer_text') or "").strip()
             
             # 🔥 [ إصلاح اسم القسم لكل سؤال ] 🔥
