@@ -5398,7 +5398,6 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
         "category_name": poll_info.get('category'),
         "chat_id": poll_info.get('chat_id'),
         "user_id": user_id,
-        "group_name": m.chat.title,
         "user_name": user_name,
         "is_correct": is_correct,
         "points_earned": total_pts,
