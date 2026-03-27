@@ -5379,11 +5379,11 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
     # 5. حساب النقاط والألقاب (محور السرعة)
     t = float(response_time)
     if is_correct:
-        if t < 1.5:
+        if t < 2.5:
             s_title, extra_pts = "⚡ (خارق الصمت)", 100
-        elif t < 3.5:
+        elif t < 4.0:
             s_title, extra_pts = "🚀 (القناص السريع)", 60
-        elif t < 5.0:
+        elif t < 6.0:
             s_title, extra_pts = "🏹 (المتمكن)", 30
         else:
             s_title, extra_pts = "🧠 (الذكي)", 0
@@ -5391,19 +5391,25 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
     else:
         s_title, total_pts = "", 0
 
-    # 6. تجهيز بيانات الإدراج لجدول answers_log
+    # 6. تجهيز بيانات الإدراج لجدول answers_log (تعديل: نمط الاختيارات فقط)
     answer_data = {
         "quiz_id": poll_info.get('db_quiz_id'),
-        "quiz_type": "اختيارات 📊",
-        "category_name": poll_info.get('category'),
+    # تحديد نوع المسابقة (public/private) من بيانات البول المرسل
+        "quiz_type": poll_info.get('quiz_type', 'private'), 
+    # تثبيت النمط هنا لأنه "اختيارات" حصراً في هذا الـ Handler
+        "quiz_style": "اختيارات 📊",
+        "category_name": poll_info.get('category', 'عام'),
         "chat_id": poll_info.get('chat_id'),
         "user_id": user_id,
         "user_name": user_name,
         "is_correct": is_correct,
         "points_earned": total_pts,
         "question_no": q_index,
-        "total_quiz_questions": poll_info.get('total_num'),
-        "answer_text": poll_info.get('correct_text') if is_correct else "خاطئة",
+        "total_quiz_questions": poll_info.get('total_num'),    
+    # تسجيل النص الصحيح للإجابة للرجوع إليه في السجلات
+        "answer_text": poll_info.get('correct_text') if is_correct else "إجابة خاطئة",
+    # تسجيل وقت الاستجابة بدقة (إذا كان محسوباً في دالة البول)
+        "response_time": t if 't' in locals() else 0.000,
         "created_at": "now()"
     }
 
