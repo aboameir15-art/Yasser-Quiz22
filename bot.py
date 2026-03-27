@@ -5247,13 +5247,26 @@ async def unified_answer_checker(m: types.Message):
             asyncio.create_task(asyncio.to_thread(save_to_db, total_pts, s_title, q_type))
 
             # ⚡ [3] تسجيل الفوز وإغلاق السؤال (نمط السرعة)
+            # ⚡ [3] تسجيل الفوز وإغلاق السؤال (نمط السرعة)
             quiz.setdefault('winners', []).append({"name": m.from_user.first_name, "id": uid, "pts": total_pts})
             
-            # إذا كانت المسابقة بنمط السرعة، نغلق السؤال في كل المجموعات فوراً
             if quiz.get('mode') == 'السرعة ⚡':
-                for p_c in quiz.get('participants_ids', [cid]):
-                    if p_c in active_quizzes: 
-                        active_quizzes[p_c]['active'] = False
+                # 1️⃣ إغلاق "بصمة" النشاط في الرادار فوراً
+                quiz['active'] = False 
+                active_quizzes[cid]['active'] = False
+                
+                # 2️⃣ إغلاق بقية المجموعات إذا كانت إذاعة عامة
+                p_ids = quiz.get('participants_ids', [cid])
+                for p_cid in p_ids:
+                    try:
+                        target_id = int(p_cid)
+                        if target_id in active_quizzes:
+                            active_quizzes[target_id]['active'] = False
+                    except:
+                        continue
+                
+                logging.info(f"🛑 [حسم]: {m.from_user.first_name} أغلق السؤال في {'الخاصة' if not quiz.get('db_quiz_id') else 'العامة'}")
+                
             
             print(f"📡 [رصد {q_type}]: {m.from_user.first_name} | ✅ {total_pts}ن | ⏱ {resp_t}s")
             return
