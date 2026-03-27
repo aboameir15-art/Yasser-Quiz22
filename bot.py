@@ -5186,14 +5186,19 @@ async def unified_answer_checker(m: types.Message):
     user_text = m.text.strip() if m.text else ""
 
     # 1️⃣ فحص المسابقات النشطة في الرادار المحلي
-    if cid in active_quizzes and active_quizzes[cid].get('active'):
+       if cid in active_quizzes and active_quizzes[cid].get('active'):
         quiz = active_quizzes[cid]
 
-        # 🛑 [قفل نمط الأزرار]
+        # 🛑 [الخطوة 0: قفل نمط الأزرار] 🛑
+        # إذا كان نمط المسابقة هو "اختيارات"، نوقف الرادار النصي فوراً
+        # لكي لا يستطيع المستخدم كتابة الإجابة كتابةً
         if quiz.get('quiz_style') == 'اختيارات 📊':
-            return 
+            return # الخروج من الدالة وعدم الاستجابة للرسائل النصية
 
-        # 🎯 جلب الإجابة الصحيحة (استخدام مفتاح 'ans' كما في حلقة البث)
+        correct_ans = str(quiz['ans']).strip()
+        
+        # ⚖️ فحص صحة الإجابة (هذا سيعمل فقط في النمط "مباشر" الآن)
+        if is_answer_correct(user_text, correct_ans):
         correct_ans = str(quiz.get('ans', quiz.get('correct_answer', ""))).strip()
         
         # ⚖️ فحص صحة الإجابة
@@ -5220,7 +5225,29 @@ async def unified_answer_checker(m: types.Message):
             base_pts = 30 if is_private else 100
             total_pts = base_pts + extra_pts
             q_type = "private" if is_private else "public"
+            
+            # 🔥 [نظام منع التكرار العابر للمجموعات] 🔥
+            p_ids = quiz.get('participants_ids', [cid])
+            is_already_winner_globally = False
+            
+            for p_cid in p_ids:
+                if p_cid in active_quizzes:
+                    if any(w['id'] == uid for w in active_quizzes[p_cid].get('winners', [])):
+                        is_already_winner_globally = True
+                        break
+            
+            if is_already_winner_globally:
+                logging.info(f"🚫 محاولة تكرار مرفوضة من {m.from_user.first_name}")
+                return
 
+            # 🛑 [نظام الإغلاق العالمي الفوري] ⚡ (في وضع السرعة)
+            if quiz.get('mode') == 'السرعة ⚡':
+                for p_cid in p_ids:
+                    if p_cid in active_quizzes:
+                        active_quizzes[p_cid]['active'] = False
+                
+                logging.info(f"⚡ إغلاق عالمي: البطل {m.from_user.first_name} حسم السؤال.")
+        
             # 💾 [2] الحفظ في سوبابيس (تعريف دالة الحفظ السريعة)
             def save_to_db(p, t_title, type_str):
                 try:
@@ -5247,29 +5274,13 @@ async def unified_answer_checker(m: types.Message):
             asyncio.create_task(asyncio.to_thread(save_to_db, total_pts, s_title, q_type))
 
             # ⚡ [3] تسجيل الفوز وإغلاق السؤال (نمط السرعة)
-            # ⚡ [3] تسجيل الفوز وإغلاق السؤال (نمط السرعة)
             quiz.setdefault('winners', []).append({"name": m.from_user.first_name, "id": uid, "pts": total_pts})
+                    
+                    # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
+                    if quiz.get('mode') == 'السرعة ⚡':
+                        quiz['active'] = False
+                    return
             
-            if quiz.get('mode') == 'السرعة ⚡':
-                # 1️⃣ إغلاق "بصمة" النشاط في الرادار فوراً
-                quiz['active'] = False 
-                active_quizzes[cid]['active'] = False
-                
-                # 2️⃣ إغلاق بقية المجموعات إذا كانت إذاعة عامة
-                p_ids = quiz.get('participants_ids', [cid])
-                for p_cid in p_ids:
-                    try:
-                        target_id = int(p_cid)
-                        if target_id in active_quizzes:
-                            active_quizzes[target_id]['active'] = False
-                    except:
-                        continue
-                
-                logging.info(f"🛑 [حسم]: {m.from_user.first_name} أغلق السؤال في {'الخاصة' if not quiz.get('db_quiz_id') else 'العامة'}")
-                
-            
-            print(f"📡 [رصد {q_type}]: {m.from_user.first_name} | ✅ {total_pts}ن | ⏱ {resp_t}s")
-            return
 # ==========================================
 # --- [ رادار إجابات الـ Poll الهجين المطور + نظام حماية الغش ] ---
 # ==========================================
