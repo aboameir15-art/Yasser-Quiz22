@@ -5231,11 +5231,11 @@ async def unified_answer_checker(m: types.Message):
             t = float(response_time)
 
             # 🏆 حساب النقاط والألقاب (مثل نظام البول تماماً)
-            if t < 1.0:
+            if t < 3.0:
                 s_title, extra_pts = "⚡ (خارق الصمت)", 100
-            elif t < 3.0:
+            elif t < 4.0:
                 s_title, extra_pts = "🚀 (القناص السريع)", 60
-            elif t < 5.0:
+            elif t < 7.0:
                 s_title, extra_pts = "🏹 (المتمكن)", 30
             else:
                 s_title, extra_pts = "🧠 (الذكي)", 0
@@ -5379,9 +5379,9 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
     # 5. حساب النقاط والألقاب (محور السرعة)
     t = float(response_time)
     if is_correct:
-        if t < 1.0:
+        if t < 1.5:
             s_title, extra_pts = "⚡ (خارق الصمت)", 100
-        elif t < 3.0:
+        elif t < 3.5:
             s_title, extra_pts = "🚀 (القناص السريع)", 60
         elif t < 5.0:
             s_title, extra_pts = "🏹 (المتمكن)", 30
@@ -5398,6 +5398,7 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
         "category_name": poll_info.get('category'),
         "chat_id": poll_info.get('chat_id'),
         "user_id": user_id,
+        "group_name": m.chat.title,
         "user_name": user_name,
         "is_correct": is_correct,
         "points_earned": total_pts,
