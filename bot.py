@@ -5195,10 +5195,6 @@ async def unified_answer_checker(m: types.Message):
         if quiz.get('quiz_style') == 'اختيارات 📊':
             return # الخروج من الدالة وعدم الاستجابة للرسائل النصية
 
-        correct_ans = str(quiz['ans']).strip()
-        
-        # ⚖️ فحص صحة الإجابة (هذا سيعمل فقط في النمط "مباشر" الآن)
-        if is_answer_correct(user_text, correct_ans):
         correct_ans = str(quiz.get('ans', quiz.get('correct_answer', ""))).strip()
         
         # ⚖️ فحص صحة الإجابة
