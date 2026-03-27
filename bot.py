@@ -4857,7 +4857,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     
 
             # 6️⃣ إغلاق السؤال وتحديث النقاط (داخل حلقة الأسئلة)
-              res_tasks = []
+            res_tasks = []
             # 🏁 [ محرك القوة العالمية - التشطيب الملكي الصافي ]
             # 1️⃣ تجميع الفائزين والمخطئين من كل المجموعات
             global_winners = []
