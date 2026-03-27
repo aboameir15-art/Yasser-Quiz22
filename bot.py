@@ -4458,7 +4458,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     except Exception as e:
                         logging.error(f"⚠️ خطأ في التلميح: {e}")
 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
 
         # 🛑 [ حماية @QuizBot: إغلاق الاستطلاع فوراً ومنع الإجابات المتأخرة ]
         if chat_id in active_quizzes:
@@ -4521,12 +4521,12 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                         logging.warning(f"Flood avoidance: {e}")
                         break
                 
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(0.5)
                 await countdown_msg.delete()
             except Exception as e:
                 logging.error(f"Countdown Error: {e}")
         else:
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.8)
 
     # 7️⃣ إعلان لوحة الشرف النهائية (جلب البيانات من الجدول مباشرة) 📊
     target_quiz_id = active_quizzes[chat_id].get('quiz_id')
@@ -4959,7 +4959,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     total_q=total_q, 
                     group_names=group_names_map
                 )
-                await asyncio.sleep(0.5) # نفس بسيط للبوت بين المجموعات
+                await asyncio.sleep(0.2) # نفس بسيط للبوت بين المجموعات
             except Exception as e: 
                 logging.error(f"Error in final results for {cid}: {e}")
             
@@ -5000,7 +5000,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
                 # 🔥 [ التشطيب النهائي: تفريغ سوبابيس ] 🔥
                 # نحذف "الأب" وبسبب CASCADE يختفي اللوج والمشاركين فوراً
-                await asyncio.sleep(2) # انتظار بسيط للتأكد من انتهاء كل العمليات
+                await asyncio.sleep(0.8) # انتظار بسيط للتأكد من انتهاء كل العمليات
                 supabase.table("active_quizzes").delete().eq("id", current_quiz_db_id).execute()
                 logging.info(f"🧹 تم تطهير النظام بالكامل للمسابقة {current_quiz_db_id}")
         
