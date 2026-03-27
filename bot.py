@@ -5158,10 +5158,30 @@ async def unified_answer_checker(m: types.Message):
             return # الخروج من الدالة وعدم الاستجابة للرسائل النصية
 
         correct_ans = str(quiz['ans']).strip()
-        
+        # ⚖️ فحص صحة الإجابة (هذا سيعمل فقط في النمط "مباشر" الآن)
         # ⚖️ فحص صحة الإجابة (هذا سيعمل فقط في النمط "مباشر" الآن)
         if is_answer_correct(user_text, correct_ans):
             
+            # 🏁 [إضافة أثير المطور]: حساب وقت الاستجابة فوراً
+            start_t = quiz.get('start_time')
+            if not start_t:
+                start_t = datetime.now() # حماية في حال فقدان الوقت
+            
+            response_time = (datetime.now() - start_t).total_seconds()
+            t = float(response_time)
+
+            # 🏆 حساب النقاط والألقاب (مثل نظام البول تماماً)
+            if t < 1.0:
+                s_title, extra_pts = "⚡ (خارق الصمت)", 100
+            elif t < 3.0:
+                s_title, extra_pts = "🚀 (القناص السريع)", 60
+            elif t < 5.0:
+                s_title, extra_pts = "🏹 (المتمكن)", 30
+            else:
+                s_title, extra_pts = "🧠 (الذكي)", 0
+            
+            total_pts = 10 + extra_pts # النقاط الأساسية + بونص السرعة
+
             # 🔥 [نظام منع التكرار العابر للمجموعات] 🔥
             p_ids = quiz.get('participants_ids', [cid])
             is_already_winner_globally = False
@@ -5176,40 +5196,47 @@ async def unified_answer_checker(m: types.Message):
                 logging.info(f"🚫 محاولة تكرار مرفوضة من {m.from_user.first_name}")
                 return
 
-            # 🛑 [نظام الإغلاق العالمي الفوري] ⚡ (في وضع السرعة)
+            # 🛑 [نظام الإغلاق العالمي الفوري] ⚡ (وضع السرعة)
             if quiz.get('mode') == 'السرعة ⚡':
                 for p_cid in p_ids:
                     if p_cid in active_quizzes:
                         active_quizzes[p_cid]['active'] = False
                 
-                logging.info(f"⚡ إغلاق عالمي: البطل {m.from_user.first_name} حسم السؤال.")
+                logging.info(f"⚡ إغلاق عالمي: البطل {m.from_user.first_name} حسمها بلقب {s_title} في {t:.2f} ثانية.")
 
-            # 💾 حفظ الإجابة في سوبابيس (Answers Log) - [المسابقات العامة]
+            # 💾 حفظ الإجابة في سوبابيس (استخدام total_pts و s_title)
             db_id = quiz.get('db_quiz_id')
             if db_id:
                 def save_to_db():
                     try:
                         supabase.table("answers_log").insert({
                             "quiz_id": db_id,
-                            "quiz_type": "public",  # تحديد النوع كعامة
+                            "quiz_type": "public",
                             "question_no": quiz.get('current_index', 1),
-                            "total_quiz_questions": quiz.get('total_questions', 1), # إجمالي الأسئلة للتنظيف
                             "chat_id": cid, 
-                            "group_name": m.chat.title, # إضافة اسم المجموعة
+                            "group_name": m.chat.title,
                             "user_id": uid, 
                             "user_name": m.from_user.first_name,
-                            "answer_text": user_text, 
+                            "answer_text": f"{user_text} {s_title}", # إضافة اللقب للنص
                             "is_correct": True,
-                            "points_earned": 10,
-                            "speed_rank": len(quiz.get('winners', [])) + 1 # ترتيب السرعة
+                            "points_earned": total_pts, # النقاط الجديدة
+                            "response_time": t, # تسجيل الوقت للدقة
+                            "speed_rank": len(quiz.get('winners', [])) + 1
                         }).execute()
-                    except Exception as e: logging.error(f"❌ خطأ حفظ النتيجة (عامة): {e}")
+                    except Exception as e: logging.error(f"❌ خطأ حفظ النتيجة: {e}")
                 
                 asyncio.create_task(asyncio.to_thread(save_to_db))
 
-                # تسجيل الفائز في الذاكرة المؤقتة للمجموعة
-                quiz['winners'].append({"name": m.from_user.first_name, "id": uid})
+                # تسجيل الفائز مع بياناته الجديدة في الرام
+                quiz['winners'].append({
+                    "name": m.from_user.first_name, 
+                    "id": uid, 
+                    "pts": total_pts, 
+                    "title": s_title,
+                    "time": t
+                })
                 return
+
 
             else:
                 # ==========================================
