@@ -4477,51 +4477,53 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             questions_to_delete.append(q_msg.message_id)
             # تخزين معرف الرسالة في الرادار لاستخدامه في الإغلاق
             active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id
-        
-
-        # 🏁 تسجيل "ساعة الصفر" لكي يحسب الرادار السرعة بدقة
+                # 🏁 تسجيل "ساعة الصفر" لكي يحسب الرادار السرعة بدقة
+        # 4️⃣ مراقبة الوقت والتلميح (تعديل أثير المطور - النسخة الصاروخية)
+        # 🏁 تسجيل "ساعة الصفر" بدقة datetime لكي يحسب الرادار السرعة للنصوص
         start_time_dt = datetime.now() 
         start_time = time.time()
         t_limit = int(quiz_data.get('time_limit', 15))
         
         # 🔥 ربط وقت البداية بالرادار لكي يراه نظام الرصد (Handler)
-        if chat_id in active_quizzes:
-            active_quizzes[chat_id]['start_time'] = start_time_dt
+        # تأكد من تحويل chat_id إلى int لضمان المطابقة في الرام
+        cid_int = int(chat_id)
+        if cid_int in active_quizzes:
+            active_quizzes[cid_id]['start_time'] = start_time_dt
+            active_quizzes[cid_id]['hint_sent'] = False
 
         h_msg = None 
         current_q_text = q.get('question_content') or q.get('question_text') or "سؤال غامض"
 
-        # حلقة مراقبة ذكية (حساسية عالية جداً للإغلاق)
+        # حلقة مراقبة ذكية (حساسية عالية جداً للإغلاق اللحظي)
         while time.time() - start_time < t_limit:
             # 🔍 فحص النبض: لو تم رصد إجابة في الـ Handler وتحولت الحالة لـ False
             # نكسر الحلقة ونخرج للنتائج فوراً (تعمل في الخاص والعام)
-            if not active_quizzes.get(chat_id) or not active_quizzes[chat_id].get('active'):
-                logging.info(f"⚡ تم رصد الإجابة.. إنهاء انتظار السؤال {i+1} فوراً.")
+            if not active_quizzes.get(cid_int) or not active_quizzes[cid_int].get('active'):
+                logging.info(f"⚡ تم رصد الإجابة في {cid_int}.. إنهاء الانتظار فوراً.")
                 break
             
             # --- [ نظام التلميح الذكي ] ---
-            if quiz_data.get('smart_hint') and not active_quizzes[chat_id].get('hint_sent'):
-                # إرسال التلميح عند منتصف الوقت
+            if quiz_data.get('smart_hint') and not active_quizzes[cid_int].get('hint_sent'):
                 if (time.time() - start_time) >= (t_limit / 2):
                     try:
                         hint_text = await generate_smart_hint(answer_text=ans, question_text=current_q_text)
-                        h_msg = await bot.send_message(chat_id, hint_text, parse_mode="HTML")
-                        active_quizzes[chat_id]['hint_sent'] = True
+                        h_msg = await bot.send_message(cid_int, hint_text, parse_mode="HTML")
+                        active_quizzes[cid_int]['hint_sent'] = True
                     except Exception as e:
                         logging.error(f"⚠️ خطأ في التلميح: {e}")
 
-            # 💡 السر هنا: تقليل النوم لـ 0.1 يجعل البوت يستجيب في جزء من عشرة من الثانية
+            # 💡 السر هنا: 0.1 يجعل البوت يفحص الحالة 10 مرات في الثانية
             await asyncio.sleep(0.1)
 
         # 🛑 [ حماية @QuizBot: إغلاق الاستطلاع ومنع الإجابات المتأخرة ]
-        if chat_id in active_quizzes:
+        if cid_int in active_quizzes:
             # إغلاق الحالة برمجياً لضمان عدم استقبال أي رسائل بعد الآن
-            active_quizzes[chat_id]['active'] = False
+            active_quizzes[cid_int]['active'] = False
             
-            poll_id_to_stop = active_quizzes[chat_id].get('last_poll_id')
+            poll_id_to_stop = active_quizzes[cid_int].get('last_poll_id')
             if poll_id_to_stop:
                 try:
-                    await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_stop)
+                    await bot.stop_poll(chat_id=cid_int, message_id=poll_id_to_stop)
                     if current_quiz_id:
                         supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_id).execute()
                 except Exception as e:
@@ -4531,8 +4533,8 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             asyncio.create_task(delete_after(h_msg, 0))
 
         # 5️⃣ إنهاء السؤال وعرض النتائج
-        if chat_id in active_quizzes:
-            current_winners = active_quizzes[chat_id].get('winners', [])
+        if cid_int in active_quizzes:
+            current_winners = active_quizzes[cid_int].get('winners', [])
             
             # تسجيل النقاط في الذاكرة لضمان دقة النتائج النهائية
             for w in current_winners:
@@ -4541,7 +4543,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     overall_scores[uid] = {"name": w['name'], "points": 0}
                 overall_scores[uid]['points'] += 1
 
-        
+
             # 🛑 التعديل الجوهري: منع القالب في نظام الاختيارات
             current_style = active_quizzes[chat_id].get('quiz_style', '')
             
