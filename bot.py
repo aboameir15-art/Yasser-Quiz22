@@ -5186,7 +5186,7 @@ async def unified_answer_checker(m: types.Message):
     user_text = m.text.strip() if m.text else ""
 
     # 1️⃣ فحص المسابقات النشطة في الرادار المحلي
-       if cid in active_quizzes and active_quizzes[cid].get('active'):
+    if cid in active_quizzes and active_quizzes[cid].get('active'):
         quiz = active_quizzes[cid]
 
         # 🛑 [الخطوة 0: قفل نمط الأزرار] 🛑
