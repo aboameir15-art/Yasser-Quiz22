@@ -5949,14 +5949,6 @@ async def process_auth_callback(c: types.CallbackQuery):
 # ==========================================
 # 5. نهاية الملف: ضمان التشغيل 24/7 + المنبه الذكي
 # ==========================================
-from aiohttp import web
-import asyncio
-import aiohttp
-
-# 1️⃣ دالة الرد على "نغزة" المواقع الخارجية (UptimeRobot / Cron-job)
-async def handle_ping(request):
-    return web.Response(text="Bot is Active and Running! 🚀")
-
 # 2️⃣ دالة "المنبه الداخلي" (Self-Ping) - لضمان بقاء البوت مستيقظاً رغماً عن السيرفر
 async def self_ping():
     # ننتظر 30 ثانية حتى يتأكد البوت من العمل تماماً عند البداية
@@ -5985,38 +5977,34 @@ async def self_ping():
         
         # نكرر العملية كل 10 دقائق (600 ثانية)
         await asyncio.sleep(600)
+# دالة الرد على "نغزة" المواقع الخارجية مثل Cron-job
+# 1️⃣ دالة الرد على "نغزة" المواقع الخارجية (UptimeRobot / Cron-job)
+from aiohttp import web
+
+async def handle_ping(request):
+    return web.Response(text="Bot is Active and Running! 🚀")
 
 if __name__ == '__main__':
-    # 1. إعداد اللوج بشكل فوري
+    # 1. إعداد سيرفر ويب صغير في الخلفية للرد على طلبات الـ HTTP
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    
+    loop = asyncio.get_event_loop()
+    runner = web.AppRunner(app)
+    loop.run_until_complete(runner.setup())
+    
+    # 2. تحديد المنفذ (Port): Render يستخدم غالباً 10000، و Koyeb يستخدم ما يحدده النظام
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    
+    # تشغيل السيرفر كـ "مهمة" جانبية حتى لا يعطل البوت
+    loop.create_task(site.start())
+    print(f"✅ Keep-alive server started on port {port}")
+
+    # 3. إعدادات السجلات والتشغيل النهائي للبوت
     logging.basicConfig(level=logging.INFO)
     
-    # 2. تشغيل سيرفر الويب في "خيط" مستقل (Background Thread)
-    def start_background_web():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        app = web.Application()
-        app.router.add_get('/', handle_ping)
-        
-        runner = web.AppRunner(app)
-        loop.run_until_complete(runner.setup())
-        
-        port = int(os.environ.get("PORT", 10000))
-        site = web.TCPSite(runner, '0.0.0.0', port)
-        
-        loop.create_task(site.start())
-        loop.create_task(self_ping()) # المنبه الداخلي
-        print(f"🚀 Keep-alive Thread Started on Port {port}")
-        loop.run_forever()
+    # بدء استقبال الرسائل (Polling) مع تخطي التحديثات القديمة
+    executor.start_polling(dp, skip_updates=True)
+    
 
-    # تشغيل الخيط الجانبي
-    from threading import Thread
-    Thread(target=start_background_web, daemon=True).start()
-
-    # 3. تشغيل البوت (العملية الأساسية)
-    print("🤖 Bot is starting polling...")
-    try:
-        executor.start_polling(dp, skip_updates=True)
-    except Exception as e:
-        logging.critical(f"❌ البوت توقف لسبب تقني: {e}")
-        
