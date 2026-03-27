@@ -5271,12 +5271,10 @@ async def unified_answer_checker(m: types.Message):
 
             # ⚡ [3] تسجيل الفوز وإغلاق السؤال (نمط السرعة)
             quiz.setdefault('winners', []).append({"name": m.from_user.first_name, "id": uid, "pts": total_pts})
-                    
-                    # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
-                    if quiz.get('mode') == 'السرعة ⚡':
-                        quiz['active'] = False
-                    return
-            
+            # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
+            if quiz.get('mode') == 'السرعة ⚡':
+                quiz['active'] = False
+            return
 # ==========================================
 # --- [ رادار إجابات الـ Poll الهجين المطور + نظام حماية الغش ] ---
 # ==========================================
