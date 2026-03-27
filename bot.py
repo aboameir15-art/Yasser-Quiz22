@@ -1615,7 +1615,8 @@ async def render_categories_list(message, eligible_cats, selected_cats, owner_id
     kb.add(InlineKeyboardButton("🔙 رجوع", callback_data=f"setup_quiz_{owner_id}"))
     await message.edit_text("📂 <b>اختر الأقسام المطلوبة:</b>", reply_markup=kb, parse_mode="HTML")
 
-# ==========================================
+
+    # ==========================================
 # --- [  قالب اعدادات المسابقه ] ---
 # ==========================================
 async def render_final_settings_panel(message, data, owner_id):
@@ -1676,6 +1677,57 @@ async def get_group_status(chat_id):
         logging.error(f"Error checking group status: {e}")
         return "error"
 # ==========================================
+# --- [  دالة فحص قبل الإعلان ] ---
+# ==========================================
+async def security_checkpoint(m: types.CallbackQuery or types.Message):
+    # ميزة: التعامل مع الضغطة (Callback) أو الرسالة (Message)
+    cid = m.message.chat.id if isinstance(m, types.CallbackQuery) else m.chat.id
+    uid = m.from_user.id
+    c_type = m.message.chat.type if isinstance(m, types.CallbackQuery) else m.chat.type
+
+    # 1️⃣ فحص نوع الدردشة (المنع من الخاص)
+    if c_type == 'private':
+        await m.answer("⚠️ الإذاعة العامة تعمل فقط داخل المجموعات المفعّلة.", show_alert=True)
+        return False
+
+    # 2️⃣ فحص تفعيل المجموعة (الشرط الأساسي)
+    try:
+        res_group = supabase.table("groups_hub").select("status").eq("group_id", cid).execute()
+        if not res_group.data or res_group.data[0]['status'] != 'active':
+            await m.answer("🚫 هذه المجموعة غير مفعّلة في نظام أثير. لا يمكن تشغيل المسابقات العامة هنا.", show_alert=True)
+            return False
+    except Exception as e:
+        logging.error(f"Error in Group Check: {e}")
+        return False
+
+    # 3️⃣ فحص الأهلية (مشرف أو خبير إجابات)
+    is_admin = False
+    try:
+        member = await bot.get_chat_member(cid, uid)
+        if member.status in ['creator', 'administrator']:
+            is_admin = True
+    except: pass
+
+    if is_admin:
+        return True # المشرف مسموح له دائماً في المجموعة المفعلة
+
+    # إذا لم يكن مشرفاً، نبحث في سجل الإجابات
+    try:
+        res_user = supabase.table("users_global_profile").select("correct_answers_count").eq("user_id", uid).execute()
+        if res_user.data:
+            ans_count = res_user.data[0].get('correct_answers_count', 0)
+            if ans_count >= 150:
+                return True # لاعب خبير مسموح له
+            else:
+                await m.answer(f"⚠️ عذراً! يجب أن تكون مشرفاً أو لديك 150 إجابة صحيحة (رصيدك: {ans_count}).", show_alert=True)
+                return False
+        else:
+            await m.answer("⚠️ لم يتم العثور على ملفك الشخصي. شارك في المسابقات أولاً!", show_alert=True)
+            return False
+    except Exception as e:
+        logging.error(f"Error in User Check: {e}")
+        return False
+        
 async def run_visual_countdown(group_msgs, kb, base_info):
     """دالة العد التنازلي البصري - آخر 10 ثوانٍ 🔥"""
     timer_emojis = ["🔟", "9️⃣", "8️⃣", "7️⃣", "6️⃣", "5️⃣", "4️⃣", "3️⃣", "2️⃣", "1️⃣"]
@@ -4121,9 +4173,17 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 pass
 
             if q_data.get('is_public'):
-                # 🌐 مسار الإذاعة العامة
-                await c.answer("🌐 جاري إطلاق الإذاعة العامة للمجموعات...")
-                await start_broadcast_process(c, quiz_id, user_id)
+                # 🛡️ استدعاء نقطة التفتيش الأمنية
+                gate_passed = await security_checkpoint(c)
+                
+                if gate_passed:
+                    # 🌐 مسار الإذاعة العامة (فقط في حال نجاح التفتيش)
+                    await c.answer("🌐 جاري إطلاق الإذاعة العامة للمجموعات...")
+                    await start_broadcast_process(c, quiz_id, user_id)
+                else:
+                    # تم التعامل مع الرد داخل دالة الـ checkpoint
+                    return 
+                
             else:
                 # 📍 مسار التشغيل الخاص
                 if q_data.get('is_bot_quiz'):
