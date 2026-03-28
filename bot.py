@@ -4482,10 +4482,6 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
     results_to_delete = []
 
     for i, q in enumerate(questions):
-        # 🕵️ [ مكبح المحطة الأولى ] - التفتيش قبل بدء السؤال
-        if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
-            logging.info(f"🛑 تم إيقاف المحرك في المجموعة {chat_id} قبل السؤال {i+1}")
-            return # الخروج النهائي من الدالة
         # [أ] استخراج الإجابة والقسم بناءً على نوع المحرك
         if engine_type == "bot":
             ans = str(q.get('correct_answer') or "").strip()
@@ -4530,91 +4526,14 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 logging.info(f"🔄 تم تحديث السؤال {i+1} في سوبابيس (ID: {current_quiz_id})")
             except Exception as e:
                 logging.error(f"❌ فشل تحديث جدول active_quizzes: {e}")
+
         
         # --- [ نظام التلميح العادي المنفصل ] ---
         normal_hint_str = ""
-        current_style = quiz_data.get('quiz_style', 'اختيارات 📊')
-
-        # 🛑 الشرط الجوهري: التلميح يظهر فقط في (الكتابة ✍️) وليس (الاختيارات 📊)
-        if quiz_data.get('smart_hint') and current_style != 'اختيارات 📊':
+        if quiz_data.get('smart_hint'):
             ans_str = str(ans).strip()
-            ans_len = len(ans_str)
-            words = ans_str.split()
-            all_chars_no_space = [c for c in ans_str if c != " "]
-            
-            # 🎭 مصفوفة القوالب الفخمة
-            hint_templates = []
-
-            # 1️⃣ [ قالب: دوامة الحروف المبعثرة ] 🌀
-            # يأخذ الحروف الحقيقية ويخضها في كل مرة بترتيب مختلف
-            shuffled_chars = all_chars_no_space.copy()
-            random.shuffle(shuffled_chars)
-            scrambled = " . ".join(shuffled_chars)
-            hint_templates.append(
-                f"🌀 <b>دوامة الحروف:</b>\n"
-                f"<code>{scrambled}</code>\n"
-                f"<i>حروف الإجابة مبعثرة.. رتبها ذهنياً!</i>"
-            )
-
-            # 2️⃣ [ قالب: الكشف العشوائي المتغير ] 💎
-            # يظهر 40% من الحروف، وفي كل مرة يختار حروفاً مختلفة تماماً
-            revealed = ""
-            indices_to_show = random.sample(range(ans_len), max(1, int(ans_len * 0.4)))
-            for idx, char in enumerate(ans_str):
-                if idx in indices_to_show or char == " ":
-                    revealed += char
-                else:
-                    revealed += "·" # نقطة تشفير أنيقة
-            hint_templates.append(
-                f"💎 <b>هيكل الإجابة المتغير:</b>\n"
-                f"<code>{revealed}</code>\n"
-                f"└─ <i>مكونة من {len(words)} كلمات</i>"
-            )
-
-            # 3️⃣ [ قالب: نظام الحواف الذهبية ] ✨
-            # يظهر أول حرف من كل كلمة في الإجابة
-            if len(words) > 1:
-                keys = " - ".join([w[0] for w in words])
-                hint_templates.append(
-                    f"✨ <b>مفاتيح البدايات:</b>\n"
-                    f"<blockquote>( {keys} )</blockquote>\n"
-                    f"<i>أوائل الكلمات بالترتيب الصحيح</i>"
-                )
-
-            # 4️⃣ [ قالب: التشفير العسكري للأطراف ] 🛡️
-            # يظهر الحرف الأول والأخير مع تمثيل الفراغات بشرطات
-            if ans_len > 2:
-                shielded = f"{ans_str[0]} " + " ".join(["_" for _ in range(ans_len-2)]) + f" {ans_str[-1]}"
-                hint_templates.append(
-                    f"🛡️ <b>تشفير المسار الأمني:</b>\n"
-                    f"<code>[ {shielded} ]</code>\n"
-                    f"📏 الطول الكلي: {ans_len} حرفاً"
-                )
-
-            # 5️⃣ [ قالب: النبضة الذكية ] ⚡
-            # يختار حرفاً واحداً عشوائياً (ليس مسافة) ويحدد موقعه بدقة
-            valid_indices = [i for i, c in enumerate(ans_str) if c != " "]
-            if valid_indices:
-                r_idx = random.choice(valid_indices)
-                hint_templates.append(
-                    f"⚡ <b>النبضة الذكية:</b>\n"
-                    f"الحرف رقم (<b>{r_idx + 1}</b>) في الإجابة هو: [ <b>{ans_str[r_idx]}</b> ]\n"
-                    f"👁‍🗨 ركز في هذا الموقع!"
-                )
-
-            # 6️⃣ [ قالب: كشف حروف العلة ] 🌊
-            # يظهر فقط (ا، و، ي) ويخفي الباقي (تحدي كلاسيكي)
-            vowels = "اويأإآى"
-            vowel_reveal = "".join([c if c in vowels or c == " " else "×" for c in ans_str])
-            if any(c in vowels for c in ans_str): # لا يظهر إلا إذا وُجدت حروف علة
-                hint_templates.append(
-                    f"🌊 <b>صدى الحروف (العلة):</b>\n"
-                    f"<code>{vowel_reveal}</code>\n"
-                    f"<i>تم كشف حروف المد فقط..</i>"
-                )
-
-            # 🎲 [ المايسترو يختار القالب النهائي لهذا السؤال ]
-            normal_hint_str = random.choice(hint_templates)
+            count_words = len(ans_str.split())
+            normal_hint_str = f"مكونة من ({count_words}) كلمات، تبدأ بـ ( {ans_str[0]} )"
 
         # 3️⃣ [ استدعاء المايسترو بستايل @QuizBot ]
         q_msg = await send_quiz_master(
@@ -4638,29 +4557,19 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         if isinstance(q_msg, types.Message):
             questions_to_delete.append(q_msg.message_id)
             # تخزين معرف الرسالة في الرادار لاستخدامه في الإغلاق
-            active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id     
+            active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id
+        
         # 4️⃣ مراقبة الوقت والتلميح
-        # 4️⃣ مراقبة الوقت والتلميح (مع استثناء نظام الاختيارات)
         start_time = time.time()
         t_limit = int(quiz_data.get('time_limit', 15))
         h_msg = None 
         current_q_text = q.get('question_content') or q.get('question_text') or "سؤال غامض"
-        
-        # جلب الستايل الحالي للتأكد
-        current_style = quiz_data.get('quiz_style', 'اختيارات 📊')
 
         while time.time() - start_time < t_limit:
-            # 🕵️ [ مكبح المحطة الثانية ] - تفتيش أثناء انتظار الإجابات
-            if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
-                poll_id = active_quizzes.get(chat_id, {}).get('last_poll_id')
-                if poll_id:
-                    try: await bot.stop_poll(chat_id, poll_id)
-                    except: pass
-                return 
-
-            # 💡 [ شرط التلميح الذكي المعدل ]
-            # يرسل التلميح فقط إذا: (مفعل في الإعدادات) + (ليس نظام اختيارات) + (لم يرسل بعد)
-            if quiz_data.get('smart_hint') and current_style != 'اختيارات 📊' and not active_quizzes[chat_id].get('hint_sent'):
+            if not active_quizzes.get(chat_id) or not active_quizzes[chat_id]['active']:
+                break
+            
+            if quiz_data.get('smart_hint') and not active_quizzes[chat_id]['hint_sent']:
                 if (time.time() - start_time) >= (t_limit / 2):
                     try:
                         hint_text = await generate_smart_hint(answer_text=ans, question_text=current_q_text)
@@ -4669,7 +4578,8 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     except Exception as e:
                         logging.error(f"⚠️ خطأ في التلميح: {e}")
 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
+
         # 🛑 [ حماية @QuizBot: إغلاق الاستطلاع فوراً ومنع الإجابات المتأخرة ]
         if chat_id in active_quizzes:
             poll_id_to_stop = active_quizzes[chat_id].get('last_poll_id')
@@ -4713,33 +4623,14 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 # في نظام الاختيارات، نكتفي بتسجيل الفوز بصمت في السجل
                 logging.info(f"✨ تم تخطي القالب لنظام الاختيارات في الدردشة {chat_id}")
                 
-        # 6️⃣ [ ⏱️ محرك العداد التنازلي المطور مع مكابح الطوارئ ]
-        # --- [ تفتيش قبل بدء العداد ] ---
-        if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
-            logging.info(f"🛑 تم إلغاء العداد التنازلي في {chat_id} بسبب توقف المسابقة.")
-            return # الخروج فوراً ومنع إرسال رسالة "استعدوا"
-
+        # 6️⃣ [ ⏱️ محرك العداد التنازلي المطور لتجنب الـ Flood ]
         if i < len(questions) - 1:
             icons = ["🔴", "🟠", "🟡", "🟢", "🔵"]
             try:
                 countdown_msg = await bot.send_message(chat_id, f"⌛ استعدوا.. السؤال التالي يبدأ بعد 5 ثواني...")
                 
                 for count in range(4, 0, -2): 
-                    # 🕵️ [ رادار التفتيش اللحظي ]
-                    # نختبر الحالة "قبل" النوم و "بعد" النوم مباشرة
-                    if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
-                        try: await countdown_msg.delete() # امسح الرسالة لو توقفت المسابقة
-                        except: pass
-                        return # اخرج من المحرك نهائياً
-
                     await asyncio.sleep(2)
-
-                    # تفتيش ثانٍ بعد الاستيقاظ من النوم (sleep) وقبل التعديل (Edit)
-                    if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
-                        try: await countdown_msg.delete()
-                        except: pass
-                        return
-
                     icon = icons[count] if count < len(icons) else "⚪"
                     try:
                         await countdown_msg.edit_text(
@@ -4751,15 +4642,9 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                         break
                 
                 await asyncio.sleep(0.3)
-                # فحص أخير قبل حذف الرسالة وبدء السؤال الجديد
-                if chat_id in active_quizzes and active_quizzes[chat_id].get('active'):
-                    try: await countdown_msg.delete()
-                    except: pass
-                else:
-                    return # لو توقفت المسابقة، لا تبدأ السؤال التالي
+                await countdown_msg.delete()
             except Exception as e:
                 logging.error(f"Countdown Error: {e}")
-                
         else:
             await asyncio.sleep(0.2)
     # 7️⃣ إعلان لوحة الشرف النهائية 📊
@@ -4801,22 +4686,8 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
 
     # 📤 إرسال لوحة الشرف
     await send_final_results2(chat_id, final_scores_from_db, len(questions))
-
-    # 🛑 [ المكبح الجوهري - إيقاف المحرك فوراً ]
-    # هذا السطر يمنع المحرك من الاستمرار في "العد التنازلي" أو إرسال أسئلة أخرى
-    if chat_id in quiz_tasks:
-        try:
-            quiz_tasks[chat_id].cancel() 
-            del quiz_tasks[chat_id]
-            logging.info(f"⚡ تم قتل مهمة المحرك للمجموعة {chat_id} بنجاح.")
-        except: pass
-
-    # 🚀 [ تحرير القاعة العالمية ]
-    # مسح المجموعة من قائمة الإذاعة النشطة لكي يتمكنوا من بدء مسابقة جديدة فوراً
-    if chat_id in active_broadcasts:
-        active_broadcasts.discard(chat_id)
-
-    # 🚀 [ مهمة التنظيف والترحيل ]
+    # بقية الكود (التنظيف والترحيل) سيعمل الآن بجدارة لأن "correct_count" صار موجوداً داخل "scores"
+    # ونترك الترحيل الثقيل وسوبابيس للخلفية    
     current_cat = active_quizzes.get(chat_id, {}).get('category', "عام")
 
     async def final_cleanup_process(tid, cid, scores, cat):
@@ -4840,23 +4711,16 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             logging.error(f"⚠️ خطأ أثناء التنظيف الشامل: {e}")
 
     # تصفير الرام "فوراً" في المسار الرئيسي لضمان عدم التداخل
-    if chat_id in active_quizzes:
-        active_quizzes[chat_id]['active'] = False # إطفاء العلم أولاً
-        del active_quizzes[chat_id]
-        
-    if chat_id in overall_scores: 
-        del overall_scores[chat_id]
+    if chat_id in active_quizzes: del active_quizzes[chat_id]
+    if chat_id in overall_scores: del overall_scores[chat_id]
 
     # إطلاق المهمة الثقيلة في الخلفية
     asyncio.create_task(final_cleanup_process(target_quiz_id, chat_id, final_scores_from_db, current_cat))
 
     # تنظيف الرسائل (بشكل متوازٍ وسريع)
     for q_mid in (questions_to_delete + results_to_delete):
-        try: 
-            # نستخدم create_task لكي لا ينتظر البوت حذف الرسائل ويفتح الجولة التالية فوراً
-            asyncio.create_task(bot.delete_message(chat_id, q_mid))
+        try: await bot.delete_message(chat_id, q_mid)
         except: pass
-        
 # ==========================================
 # ==========================================
 
