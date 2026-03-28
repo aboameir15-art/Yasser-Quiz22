@@ -5009,68 +5009,70 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 await asyncio.sleep(2)       
         # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
         # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️ (المسافة: 8 فراغات)
-        async def broadcast_cleanup_worker():
+        
+        # تعريف الدالة الخلفية للقيام بالمهام الثقيلة
+        async def global_cleanup_worker(q_id, chats, scores, cat):
             try:
-                # أ. إرسال النتائج لكل المجموعات (توازي خفيف)
-                for cid in all_chats:
+                # 1. إرسال النتائج لكل المجموعات (توازي خفيف)
+                for cid in chats:
                     try:
                         await send_broadcast_final_results(
                             chat_id=cid, 
-                            scores=group_scores, 
+                            scores=scores, 
                             total_q=total_q, 
                             group_names=group_names_map
                         )
-                        await asyncio.sleep(0.1) # سرعة أعلى لتجنب الملل
+                        await asyncio.sleep(0.1) 
                     except: continue
 
-                # ب. الجرد والترحيل من سوبابيس (مرة واحدة فقط)
-                if current_quiz_db_id:
-                    # جلب البيانات لمرة واحدة بدلاً من تكرار الطلب
+                # 2. الجرد والترحيل من سوبابيس (مرة واحدة فقط)
+                if q_id:
+                    # تنفيذ طلب سوبابيس في Thread جانبي لمنع تجمد المحرك
+                    loop = asyncio.get_event_loop()
                     log_res = await loop.run_in_executor(None, lambda: (
-                        supabase.table("answers_log").select("*").eq("quiz_id", current_quiz_db_id).execute()
+                        supabase.table("answers_log").select("*").eq("quiz_id", q_id).execute()
                     ))
                     
                     if log_res.data:
-                        # المزامنة العالمية (الاستدعاء الآمن)
-                        await sync_points_to_global_db(group_scores={}, quiz_id=current_quiz_db_id, cat_name=cat_name)
-                        logging.info("✅ تم الترحيل العالمي من سجل الإجابات.")
+                        await sync_points_to_global_db(group_scores={}, quiz_id=q_id, cat_name=cat)
+                        logging.info(f"✅ تم ترحيل نتائج الإذاعة {q_id} بنجاح.")
 
-                    # 🔥 [ المحرقة ] - حذف الأب يمسح سجلات الإجابات والمشاركين (CASCADE)
-                    await asyncio.sleep(1)
+                    # 3. 🔥 [ المحرقة ] - مسح سجلات الإذاعة من قاعدة البيانات
                     await loop.run_in_executor(None, lambda: (
-                        supabase.table("active_quizzes").delete().eq("id", current_quiz_db_id).execute()
+                        supabase.table("active_quizzes").delete().eq("id", q_id).execute()
                     ))
 
-                # ج. تنظيف الرسائل (آخر خطوة وبأقل استهلاك)
-                for cid in all_chats:
+                # 4. تنظيف الرسائل بهدوء (خلفية)
+                for cid in chats:
                     all_mids = messages_to_delete.get(cid, []) + results_to_delete.get(cid, [])
                     for i, mid in enumerate(all_mids):
-                        try:
+                        try: 
                             await bot.delete_message(cid, mid)
-                            if i % 8 == 0: await asyncio.sleep(1.5) # حماية قصوى من الـ Flood
+                            if i % 5 == 0: await asyncio.sleep(1)
                         except: pass
-                
-                logging.info(f"🧹 تم تطهير نظام الإذاعة بالكامل للمسابقة {current_quiz_db_id}")
 
             except Exception as e:
-                logging.error(f"🚨 Background Broadcast Cleanup Error: {e}")
+                logging.error(f"🚨 Background Global Cleanup Error: {e}")
 
-        # 🚀 إطلاق "عامل التنظيف" في الخلفية (هذا يمنع البوت من النوم)
-        import asyncio
-        loop = asyncio.get_event_loop()
-        asyncio.create_task(broadcast_cleanup_worker())
+        # 🚀 [ إطلاق المهمة فوراً ]
+        # تأكد أن asyncio مستورد في أعلى الملف لتجنب Fatal Error
+        asyncio.create_task(global_cleanup_worker(
+            current_quiz_db_id, 
+            all_chats, 
+            group_scores, 
+            cat_name
+        ))
 
     except Exception as e:
         logging.error(f"🚨 Global Engine Fatal Error: {e}")
     finally:
-        # 🔓 فتح القفل الفوري (هذا يسمح ببدء إذاعة جديدة فوراً)
+        # 🔓 فتح القفل الفوري وتصفير الرام (أهم خطوة لمنع التداخل)
         for cid in all_chats: 
             active_broadcasts.discard(cid)
-            # تصفير الذاكرة الرام فوراً لضمان عدم تداخل البيانات
             if cid in active_quizzes: del active_quizzes[cid]
             if cid in overall_scores: del overall_scores[cid]
         
-        logging.info("✨ المحرك جاهز لاستقبال مهمة إذاعة جديدة.")
+        logging.info("✨ نظام الإذاعة العامة عاد للوضع الجاهز (Idle).")
 
 # =======================================
 # --- [ بداية الدالة من العمود 0 لضمان عدم وجود SyntaxError ] ---
