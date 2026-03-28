@@ -4587,14 +4587,14 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 logging.error(f"Countdown Error: {e}")
         else:
             await asyncio.sleep(0.2)
-
     # 7️⃣ إعلان لوحة الشرف النهائية 📊
+    # 7️⃣ إعلان لوحة الشرف النهائية 📊
+    # تأكد أن import asyncio موجود في أعلى الملف تماماً (Global)
     target_quiz_id = active_quizzes.get(chat_id, {}).get('quiz_id')
     final_scores_from_db = {}
 
     if target_quiz_id:
         try:
-            import asyncio
             loop = asyncio.get_event_loop()
             
             # جلب البيانات من السجل لضمان الدقة
@@ -4613,50 +4613,50 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                         final_scores_from_db[uid] = {"name": row['user_name'], "points": 0}
                     final_scores_from_db[uid]['points'] += row['points_earned']
             else:
-                # تصفير ذكي: سحب من الرام إذا فشل سوبابيس
+                # إذا لم نجد في سوبابيس، نسحب من الرام قبل حذفها
                 final_scores_from_db = overall_scores.get(chat_id, {})
         
         except Exception as e:
             logging.error(f"❌ خطأ جلب النتائج: {e}")
             final_scores_from_db = overall_scores.get(chat_id, {})
 
-    # إرسال لوحة الشرف
+    # 📤 إرسال لوحة الشرف (الآن)
     await send_final_results2(chat_id, final_scores_from_db, len(questions))
 
-    # 🚀 [ ترحيل البيانات وتصفير الذاكرة في الخلفية ]
-    async def final_cleanup_process(tid, cid, scores):
+    # 🚀 [ مهمة التنظيف والترحيل ]
+    # ملاحظة: أخرجنا القواميس من الرام "فوراً" لفتح المجال لمسابقة جديدة
+    # ونترك الترحيل الثقيل وسوبابيس للخلفية
+    
+    current_cat = active_quizzes.get(chat_id, {}).get('category', "عام")
+
+    async def final_cleanup_process(tid, cid, scores, cat):
         try:
-            # 1. الترحيل العالمي
+            # 1. الترحيل العالمي (خلفية)
             if scores:
                 await sync_points_to_global_db(
                     group_scores={"special_event": scores}, 
                     winners_list=["special_event"], 
-                    cat_name=active_quizzes.get(cid, {}).get('category', "عام"), 
+                    cat_name=cat, 
                     is_special=True
                 )
             
-            # 2. تنظيف سوبابيس (CASCADE سيحذف answers_log)
+            # 2. تنظيف سوبابيس (خلفية)
             if tid:
                 supabase.table("active_quizzes").delete().eq("id", tid).execute()
             
-            # 3. 🔥 [ تصفير ذاكرة الاختيارات والرصد النصي نهائياً ] 🔥
-            # تصفير القواميس الرئيسية لضمان عدم تداخل المسابقات
-            if cid in active_quizzes: del active_quizzes[cid]
-            if cid in overall_scores: del overall_scores[cid]
-            
-            # إذا كان لديك قاموس خاص برصد أزرار الاختيارات (مثل user_answers أو poll_votes)
-            # أضف تصفيره هنا:
-            # if cid in user_votes_memory: del user_votes_memory[cid]
-
-            logging.info(f"✨ تم تصفير كافة السجلات والذاكرة للمجموعة {cid}")
+            logging.info(f"✨ تم تصفير كافة السجلات بنجاح للمجموعة {cid}")
             
         except Exception as e:
             logging.error(f"⚠️ خطأ أثناء التنظيف الشامل: {e}")
 
-    # إطلاق عملية التنظيف دون جعل البوت ينتظرها (منع النوم)
-    asyncio.create_task(final_cleanup_process(target_quiz_id, chat_id, final_scores_from_db))
+    # تصفير الرام "فوراً" في المسار الرئيسي لضمان عدم التداخل
+    if chat_id in active_quizzes: del active_quizzes[chat_id]
+    if chat_id in overall_scores: del overall_scores[chat_id]
 
-    # تنظيف الرسائل (بشكل سريع)
+    # إطلاق المهمة الثقيلة في الخلفية
+    asyncio.create_task(final_cleanup_process(target_quiz_id, chat_id, final_scores_from_db, current_cat))
+
+    # تنظيف الرسائل (بشكل متوازٍ وسريع)
     for q_mid in (questions_to_delete + results_to_delete):
         try: await bot.delete_message(chat_id, q_mid)
         except: pass
