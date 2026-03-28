@@ -4920,16 +4920,24 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             # 6️⃣ إغلاق السؤال وتحديث النقاط (داخل حلقة الأسئلة)
             res_tasks = []
             # 🏁 [ محرك القوة العالمية - التشطيب الملكي الصافي ]
-            # 1️⃣ تجميع الفائزين والمخطئين من كل المجموعات
+            
+            # 1️⃣ تجميع الفائزين والمخطئين من كل المجموعات (للقالب الملكي)
             global_winners = []
             global_losers = []         
             for cid in all_chats:
                 if cid in active_quizzes:
+                    # --- [ تجميع الفائزين ] ---
                     for winner in active_quizzes[cid].get('winners', []):
-                        winner['home_cid'] = cid  # حفظ المجموعة الأم
-                        # نأخذ اليوزر إذا وجد، وإلا نكتفي بـ None
+                        winner['home_cid'] = cid  
                         winner['user_name'] = winner.get('username') 
-                        global_winners.append(winner)            
+                        global_winners.append(winner)
+                    
+                    # --- [ تجميع المخطئين ] ---
+                    for loser in active_quizzes[cid].get('losers', []):
+                        loser['home_cid'] = cid  
+                        loser['user_name'] = loser.get('name', 'لاعب') 
+                        global_losers.append(loser)
+
             # 🏆 ترتيب ملوك العالم حسب السرعة (الأسرع يتصدر 🥇)
             global_winners = sorted(global_winners, key=lambda x: x.get('time', 0))
             
@@ -4938,9 +4946,11 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 if cid in active_quizzes:
                     active_quizzes[cid]['active'] = False
 
-                # --- [ تحديث الفائزين + بونص الـ 5 نقاط لأول واحد في المجموعة ] ---
+                # --- [ منطق الفائزين ونظام النخبة (أول إجابة للمجموعة) ] ---
                 local_winners = active_quizzes.get(cid, {}).get('winners', [])
-                group_bonus_awarded = False 
+                
+                # 🚩 قفل المجموعة: أول لاعب يمر يمنح المجموعة النقاط ويغلق الباب
+                group_points_claimed = False 
 
                 for w in local_winners:
                     uid, uname, pts_earned = w['id'], w['name'], w.get('pts', 10)
@@ -4948,23 +4958,28 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     if uid not in group_scores[cid]:
                         group_scores[cid][uid] = {"name": uname, "points": 0}
                     
-                    # منطق البونص: المجموعة تأخذ 5 نقاط إضافية مع أول فائز فقط
-                    final_pts = pts_earned
-                    if not group_bonus_awarded:
-                        final_pts += 5
-                        group_bonus_awarded = True 
+                    # ⚖️ تطبيق العدالة: إذا لم تأخذ المجموعة نقاطها لهذا السؤال بعد
+                    if not group_points_claimed:
+                        # هذا هو "قناص" المجموعة الأول
+                        final_pts = pts_earned + 5 # بونص أول إجابة للمجموعة
+                        group_points_claimed = True # 🔒 إغلاق النقاط لهذه المجموعة
+                        
+                        # تحديث الذاكرة المحلية (رصيد المجموعة)
+                        group_scores[cid][uid]['points'] += final_pts
+                        
+                        # تحديث سوبابيس (العالمي) للمجموعة
+                        try:
+                            gname = group_names_map.get(cid, "مجموعة مجهولة")
+                            await update_group_stats(cid, gname, uid, uname, final_pts)
+                        except Exception as e:
+                            logging.error(f"⚠️ خطأ سوبابيس: {e}")
+                    else:
+                        # باقي اللاعبين في نفس المجموعة:
+                        # تضاف نقاطهم لبروفايلهم الشخصي (اختياري) ولكن لا ترفع رصيد المجموعة
+                        # هنا نتركها فارغة للحفاظ على التوازن العالمي
+                        pass
 
-                    # تحديث الذاكرة المحلية (لتظهر في رصيد المجموعة بالقالب)
-                    group_scores[cid][uid]['points'] += final_pts
-                    
-                    # تحديث سوبابيس (العالمي)
-                    try:
-                        gname = group_names_map.get(cid, "مجموعة مجهولة")
-                        await update_group_stats(cid, gname, uid, uname, final_pts)
-                    except Exception as e:
-                        logging.error(f"⚠️ خطأ سوبابيس: {e}")
-
-                # --- [ تحديث المخطئين (الخصم) ] ---
+                # --- [ تحديث المخطئين (الخصم الفردي) ] ---
                 local_losers = active_quizzes.get(cid, {}).get('losers', [])
                 for l in local_losers:
                     l_uid, l_uname, penalty = l['id'], l['name'], l.get('penalty', 5)
@@ -4972,6 +4987,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     if l_uid not in group_scores[cid]:
                         group_scores[cid][l_uid] = {"name": l_uname, "points": 0}
                     
+                    # الخصم يظل فردياً لضمان الانضباط
                     group_scores[cid][l_uid]['points'] -= penalty
                     
                     try:
@@ -4980,12 +4996,12 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     except Exception as e:
                         logging.error(f"⚠️ خطأ خصم سوبابيس: {e}")
 
-                # 3️⃣ إرسال القالب الملكي (بالتنسيق الفخم الذي صممته)
+                # 3️⃣ إرسال القالب الملكي الفخم
                 res_tasks.append(send_creative_results(
                     chat_id=cid, 
                     correct_ans=ans, 
-                    winners=global_winners,  # القائمة مرتبة عالمياً وصافية تماماً
-                    losers=global_losers,    # قائمة المخطئين صافية
+                    winners=global_winners,  
+                    losers=global_losers,    
                     group_scores=group_scores, 
                     is_public=True,
                     mode=quiz_data.get('mode', 'السرعة ⚡'),
