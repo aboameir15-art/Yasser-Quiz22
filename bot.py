@@ -4488,6 +4488,12 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
     results_to_delete = []
 
     # 🔄 بداية حلقة الأسئلة
+    # 🕵️ تأمين وجود المجموعة في الرادار قبل البدء
+    if chat_id not in active_quizzes:
+        active_quizzes[chat_id] = {'active': True}
+    else:
+        active_quizzes[chat_id]['active'] = True
+        
     for i, q in enumerate(questions):
         
         # 🕵️ [ مكبح المحطة الأولى: فحص السيادة قبل كل سؤال ]
@@ -4605,8 +4611,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 logging.info(f"🛑 تم إيقاف عرض النتائج في {chat_id} - انسحاب")
                 return # خروج قطعي ومنع الانتقال للعداد
 
-            # إيقاف حالة السؤال الحالي
-            active_quizzes[chat_id]['active'] = False 
+            # إيقاف حالة السؤال الحالي 
             current_winners = active_quizzes[chat_id].get('winners', [])
             
             # تسجيل النقاط في الذاكرة (overall_scores)
@@ -4743,16 +4748,17 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             logging.error(f"⚠️ فشل التنظيف النهائي: {e}")
 
     # إطلاق مهمة الخلفية مع تمرير كافة الوسائط المطلوبة
+    # ✅ استدعاء واحد فقط وصحيح (يحتوي على m_ids في النهاية)
     asyncio.create_task(final_cleanup_process(
         target_quiz_id, 
         chat_id, 
         final_scores_from_db, 
         current_cat, 
-        (questions_to_delete + results_to_delete) # تأكد من وجود هذا المدخل الخامس
+        (questions_to_delete + results_to_delete) 
     ))
 
-    # تحرير القاعة فوراً (فتح القفل المنطقي)
-    active_broadcasts.discard(chat_id) 
+    # تحرير القاعة (القفل المنطقي)
+    active_broadcasts.discard(chat_id)
     
     logging.info(f"✅ تم تحرير القاعة {chat_id} وجاري التنظيف في الخلفية...")
 
