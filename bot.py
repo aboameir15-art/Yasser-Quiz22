@@ -4530,11 +4530,8 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 logging.info(f"🔄 تم تحديث السؤال {i+1} في سوبابيس (ID: {current_quiz_id})")
             except Exception as e:
                 logging.error(f"❌ فشل تحديث جدول active_quizzes: {e}")
-
         
         # --- [ نظام التلميح العادي المنفصل ] ---
-        # --- [ 💠 محرك أثير للتلميحات الماسية - إصدار 2026 ] ---
-        import random
         normal_hint_str = ""
         current_style = quiz_data.get('quiz_style', 'اختيارات 📊')
 
