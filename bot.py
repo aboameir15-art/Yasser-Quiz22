@@ -4447,7 +4447,9 @@ async def delete_after(message, delay):
 # ==========================================
 # [2] المحرك الموحد (نسخة التشطيب الرسمي @QuizBot + العداد المطور)
 # ==========================================
+# ==========================================
 async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_type):
+    import random # 👈 الجراحة الأولى: استدعاء محلي لمنع خطأ الـ Local Variable
     random.shuffle(questions)
     overall_scores = {}
     
@@ -4481,7 +4483,15 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
     questions_to_delete = []
     results_to_delete = []
 
+    # 🔄 بداية حلقة الأسئلة
     for i, q in enumerate(questions):
+        
+        # 🕵️ [ مكبح المحطة الأولى: فحص السيادة قبل كل سؤال ]
+        # إذا تم حذف المجموعة من الرادار أو ضُبطت active على False (بواسطة "انسحاب")
+        if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
+            logging.info(f"🛑 تم تفعيل المكبح السيادي: إيقاف المحرك قبل السؤال {i+1} في {chat_id}")
+            break # الخروج من الحلقة فوراً
+
         # [أ] استخراج الإجابة والقسم بناءً على نوع المحرك
         if engine_type == "bot":
             ans = str(q.get('correct_answer') or "").strip()
@@ -4492,9 +4502,9 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         else:
             ans = str(q.get('correct_answer') or q.get('ans') or "").strip()
             cat_name = "مخصص 🔒"
-
+            
         # 2️⃣ تحديث الذاكرة النشطة للبوت (الرادار المحلي)
-        active_quizzes[chat_id] = {
+        active_quizzes[chat_id].update({
             "active": True, 
             "ans": ans, 
             "winners": [], 
@@ -4506,11 +4516,11 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             "current_index": i + 1,
             "total_questions": len(questions),
             "raw_q_data": q,
-            "correct_ans": ans
-        }
+            "correct_ans": ans,
+            "hint_sent": False # 👈 مفتاح أمان ضروري لمنع تكرار التلميحات
+        })
 
         # 3️⃣ [ التحديث اللحظي لقاعدة البيانات ] 🚀
-        # نقوم بمزامنة رقم السؤال والإجابة وتصفير بيانات التصويت للسؤال الجديد
         if current_quiz_id:
             try:
                 supabase.table("active_quizzes").update({
@@ -4522,20 +4532,18 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     "voter_list": {},
                     "user_choices": {}
                 }).eq("id", current_quiz_id).execute()
-                
-                logging.info(f"🔄 تم تحديث السؤال {i+1} في سوبابيس (ID: {current_quiz_id})")
+                logging.info(f"🔄 تم تحديث السؤال {i+1} في سوبابيس")
             except Exception as e:
-                logging.error(f"❌ فشل تحديث جدول active_quizzes: {e}")
+                logging.error(f"❌ فشل تحديث سوبابيس: {e}")
 
-        
-        # --- [ نظام التلميح العادي المنفصل ] ---
+        # --- [ نظام التلميح العادي البسيط ] ---
         normal_hint_str = ""
         if quiz_data.get('smart_hint'):
             ans_str = str(ans).strip()
-            count_words = len(ans_str.split())
-            normal_hint_str = f"مكونة من ({count_words}) كلمات، تبدأ بـ ( {ans_str[0]} )"
+            # تلميح أساسي جداً (بدون إضافات) التزاماً بالمرحلة الحالية
+            normal_hint_str = f"مكونة من ({len(ans_str.split())}) كلمات، تبدأ بـ ( {ans_str[0]} )"
 
-        # 3️⃣ [ استدعاء المايسترو بستايل @QuizBot ]
+        # 3️⃣ [ استدعاء المايسترو ]
         q_msg = await send_quiz_master(
             chat_id, 
             q, 
@@ -4556,81 +4564,83 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         
         if isinstance(q_msg, types.Message):
             questions_to_delete.append(q_msg.message_id)
-            # تخزين معرف الرسالة في الرادار لاستخدامه في الإغلاق
             active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id
         
-        # 4️⃣ مراقبة الوقت والتلميح
+        # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري ]
         start_time = time.time()
         t_limit = int(quiz_data.get('time_limit', 15))
-        h_msg = None 
-        current_q_text = q.get('question_content') or q.get('question_text') or "سؤال غامض"
 
         while time.time() - start_time < t_limit:
-            if not active_quizzes.get(chat_id) or not active_quizzes[chat_id]['active']:
-                break
-            
-            if quiz_data.get('smart_hint') and not active_quizzes[chat_id]['hint_sent']:
-                if (time.time() - start_time) >= (t_limit / 2):
-                    try:
-                        hint_text = await generate_smart_hint(answer_text=ans, question_text=current_q_text)
-                        h_msg = await bot.send_message(chat_id, hint_text, parse_mode="HTML")
-                        active_quizzes[chat_id]['hint_sent'] = True
-                    except Exception as e:
-                        logging.error(f"⚠️ خطأ في التلميح: {e}")
+            # 🕵️ [ مكبح السيادة: فحص الانسحاب كل 0.1 ثانية ]
+            if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
+                # قتل الاستطلاع فوراً قبل الخروج النهائي
+                poll_id_to_kill = active_quizzes.get(chat_id, {}).get('last_poll_id')
+                if poll_id_to_kill:
+                    try: await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_kill)
+                    except: pass
+                logging.info(f"🛑 تم تفعيل المكبح أثناء انتظار الإجابة في {chat_id}")
+                return # 👈 هروب نهائي من الدالة (Kill Task)
 
             await asyncio.sleep(0.1)
 
-        # 🛑 [ حماية @QuizBot: إغلاق الاستطلاع فوراً ومنع الإجابات المتأخرة ]
+        # 🛑 [ إغلاق الاستطلاع بعد انتهاء الوقت الطبيعي ]
         if chat_id in active_quizzes:
             poll_id_to_stop = active_quizzes[chat_id].get('last_poll_id')
             if poll_id_to_stop:
                 try:
-                    # إغلاق الاستطلاع في تليجرام
                     await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_stop)
-                    
-                    # تحديث سوبابيس لإيقاف السؤال برمجياً
                     if current_quiz_id:
-                        supabase.table("active_quizzes").update({
-                            "is_active": False 
-                        }).eq("id", current_quiz_id).execute()
+                        supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_id).execute()
                 except Exception as e:
-                    logging.warning(f"⚠️ لم يتم إغلاق الاستطلاع (قد يكون مغلقاً بالفعل): {e}")
-
-        if h_msg:
-            asyncio.create_task(delete_after(h_msg, 0))
+                    logging.warning(f"⚠️ الاستطلاع مغلق مسبقاً: {e}")
 
         # 5️⃣ إنهاء السؤال وعرض النتائج
         if chat_id in active_quizzes:
-            active_quizzes[chat_id]['active'] = False
+            # 🕵️ [ مكبح المحطة الثالثة: فحص قبل عرض نتائج السؤال ]
+            if not active_quizzes[chat_id].get('active'):
+                logging.info(f"🛑 تم إيقاف عرض النتائج في {chat_id} - انسحاب")
+                return # خروج قطعي ومنع الانتقال للعداد
+
+            # إيقاف حالة السؤال الحالي
+            active_quizzes[chat_id]['active'] = False 
             current_winners = active_quizzes[chat_id].get('winners', [])
             
-            # تسجيل النقاط في الذاكرة لضمان دقة النتائج النهائية
+            # تسجيل النقاط في الذاكرة (overall_scores)
             for w in current_winners:
                 uid = w['id']
                 if uid not in overall_scores:
                     overall_scores[uid] = {"name": w['name'], "points": 0}
                 overall_scores[uid]['points'] += 1
         
-            # 🛑 التعديل الجوهري: منع القالب في نظام الاختيارات
+            # 🛑 عرض القالب (فقط لنظام الكتابة/المباشر)
             current_style = active_quizzes[chat_id].get('quiz_style', '')
-            
-            # إذا لم يكن النظام "اختيارات 📊"، أرسل القالب المعتاد
             if current_style != 'اختيارات 📊':
                 res_msg = await send_creative_results2(chat_id, ans, current_winners, overall_scores)
                 if isinstance(res_msg, types.Message):
                     results_to_delete.append(res_msg.message_id)
             else:
-                # في نظام الاختيارات، نكتفي بتسجيل الفوز بصمت في السجل
-                logging.info(f"✨ تم تخطي القالب لنظام الاختيارات في الدردشة {chat_id}")
+                logging.info(f"✨ نظام اختيارات: تسجيل الفوز صامتاً في {chat_id}")
                 
-        # 6️⃣ [ ⏱️ محرك العداد التنازلي المطور لتجنب الـ Flood ]
+        # 6️⃣ [ ⏱️ محرك العداد التنازلي المطور مع مكابح داخلية ]
         if i < len(questions) - 1:
-            icons = ["🔴", "🟠", "🟡", "🟢", "🔵"]
+            # 🕵️ [ مكبح المحطة الرابعة: فحص قبل بدء العداد التنازلي ]
+            # هنا نتأكد أن المطور لم يوقف المسابقة أثناء عرض النتائج
+            if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
+                return
+
+            icons = ["⚪", "🔵", "🟢", "🟡", "🟠", "🔴"]
             try:
-                countdown_msg = await bot.send_message(chat_id, f"⌛ استعدوا.. السؤال التالي يبدأ بعد 5 ثواني...")
+                countdown_msg = await bot.send_message(chat_id, f"⌛ استعدوا.. السؤال التالي يبدأ بعد قليل...")
                 
-                for count in range(4, 0, -2): 
-                    await asyncio.sleep(2)
+                # عداد ذكي (5 ثوانٍ) يفحص "البريك" في كل ثانية
+                for count in range(5, 0, -1):
+                    # 🔍 التفتيش اللحظي داخل العداد
+                    if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
+                        await countdown_msg.delete()
+                        logging.info(f"⚡ تم قتل العداد فوراً في {chat_id}")
+                        return 
+                    
+                    # تحديث شكل العداد (تحديث كل ثانية ليكون أكثر فخامة)
                     icon = icons[count] if count < len(icons) else "⚪"
                     try:
                         await countdown_msg.edit_text(
@@ -4639,24 +4649,26 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                         )
                     except Exception as e:
                         logging.warning(f"Flood avoidance: {e}")
-                        break
+                        # إذا حدث Flood، نكتفي بالانتظار صمتاً دون تحديث النص
+                    
+                    await asyncio.sleep(1) # الانتظار ثانية واحدة للفحص التالي
                 
-                await asyncio.sleep(0.3)
                 await countdown_msg.delete()
             except Exception as e:
                 logging.error(f"Countdown Error: {e}")
         else:
-            await asyncio.sleep(0.2)
-    # 7️⃣ إعلان لوحة الشرف النهائية 📊
-    # 7️⃣ إعلان لوحة الشرف النهائية 📊 (المسافة: 4 فراغات)
+            # نهاية الأسئلة - استراحة قصيرة قبل النتائج النهائية
+            await asyncio.sleep(0.3)
+            
+    # 7️⃣ [ إعلان لوحة الشرف النهائية 📊 ]
     target_quiz_id = active_quizzes.get(chat_id, {}).get('quiz_id')
+    current_cat = active_quizzes.get(chat_id, {}).get('category', "عام")
     final_scores_from_db = {}
 
     if target_quiz_id:
         try:
             loop = asyncio.get_event_loop()
-            
-            # 🚀 [التعديل الأول]: جلبنا "is_correct" أيضاً لنعرف عدد الإجابات
+            # جلب البيانات من سوبابيس (نقاط + عدد الإجابات الصحيحة)
             response = await loop.run_in_executor(None, lambda: (
                 supabase.table("answers_log")
                 .select("user_id, user_name, points_earned, is_correct")
@@ -4669,30 +4681,42 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 for row in response.data:
                     uid = row['user_id']
                     if uid not in final_scores_from_db:
-                        # 🚀 [التعديل الثاني]: أضفنا مفتاح correct_count هنا لكي تراه دالة المزامنة
                         final_scores_from_db[uid] = {"name": row['user_name'], "points": 0, "correct_count": 0}
-                    
                     final_scores_from_db[uid]['points'] += row['points_earned']
-                    # زيادة عداد الإجابات الصحيحة
                     final_scores_from_db[uid]['correct_count'] += 1
-                
-                logging.info(f"✅ تم حصاد {len(final_scores_from_db)} فائز مع عدّ إجاباتهم بدقة.")
             else:
-                final_scores_from_db = overall_scores.get(chat_id, {})
-        
+                # خطة الطوارئ: استخدام الذاكرة المحلية إذا تعذر الاتصال بسوبابيس
+                final_scores_from_db = overall_scores.get(chat_id, {}).copy()
         except Exception as e:
-            logging.error(f"❌ خطأ جلب النتائج: {e}")
-            final_scores_from_db = overall_scores.get(chat_id, {})
+            logging.error(f"❌ خطأ جلب النتائج النهائية: {e}")
+            final_scores_from_db = overall_scores.get(chat_id, {}).copy()
 
-    # 📤 إرسال لوحة الشرف
+    # 📤 إرسال لوحة الشرف النهائية (الواجهة البصرية للاعبين)
     await send_final_results2(chat_id, final_scores_from_db, len(questions))
-    # بقية الكود (التنظيف والترحيل) سيعمل الآن بجدارة لأن "correct_count" صار موجوداً داخل "scores"
-    # ونترك الترحيل الثقيل وسوبابيس للخلفية    
-    current_cat = active_quizzes.get(chat_id, {}).get('category', "عام")
 
-    async def final_cleanup_process(tid, cid, scores, cat):
+    # 🔥 [ الجراحة السيادية: التصفير اللحظي والشامل للرام ]
+    
+    # 1. تصفير "ذاكرة الرصد السريع" (active_polls) لمنع تداخل الاختيارات
+    active_polls_keys = [k for k, v in active_polls.items() if v.get('chat_id') == chat_id]
+    for k in active_polls_keys:
+        if k in active_polls:
+            del active_polls[k]
+    logging.info(f"🧹 تم تصفير {len(active_polls_keys)} سجل من ذاكرة الاختيارات (active_polls)")
+
+    # 2. تصفير "الرادار المحلي" (active_quizzes)
+    if chat_id in active_quizzes:
+        active_quizzes[chat_id]['active'] = False
+        del active_quizzes[chat_id]
+        logging.info(f"🧹 تم تنظيف الرادار المحلي للمجموعة {chat_id}")
+
+    # 3. تصفير مصفوفة النقاط المؤقتة
+    if chat_id in overall_scores:
+        del overall_scores[chat_id]
+
+    # 🚀 [ المهمة الثقيلة: التنظيف العميق والترحيل للخلفية ]
+    async def final_cleanup_process(tid, cid, scores, cat, m_ids):
         try:
-            # 1. الترحيل العالمي (خلفية)
+            # 1️⃣ المزامنة مع قاعدة البيانات العالمية (حفظ عرق اللاعبين)
             if scores:
                 await sync_points_to_global_db(
                     group_scores={"special_event": scores}, 
@@ -4701,18 +4725,18 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     is_special=True
                 )
             
-            # 2. تنظيف سوبابيس (خلفية)
+            # 2️⃣ تدمير سجل المسابقة في سوبابيس (لإتاحة البدء من جديد)
             if tid:
                 supabase.table("active_quizzes").delete().eq("id", tid).execute()
             
-            logging.info(f"✨ تم تصفير كافة السجلات بنجاح للمجموعة {cid}")
-            
+            # 3️⃣ مسح مخلفات الرسائل (تنظيف الدردشة)
+            for m_id in m_ids:
+                try: await bot.delete_message(cid, m_id)
+                except: pass
+                
+            logging.info(f"✨ اكتمل التطهير والترحيل بنجاح للمجموعة {cid}")
         except Exception as e:
-            logging.error(f"⚠️ خطأ أثناء التنظيف الشامل: {e}")
-
-    # تصفير الرام "فوراً" في المسار الرئيسي لضمان عدم التداخل
-    if chat_id in active_quizzes: del active_quizzes[chat_id]
-    if chat_id in overall_scores: del overall_scores[chat_id]
+            logging.error(f"⚠️ فشل التنظيف النهائي: {e}")
 
     # إطلاق المهمة الثقيلة في الخلفية
     asyncio.create_task(final_cleanup_process(target_quiz_id, chat_id, final_scores_from_db, current_cat))
@@ -4721,7 +4745,6 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
     for q_mid in (questions_to_delete + results_to_delete):
         try: await bot.delete_message(chat_id, q_mid)
         except: pass
-# ==========================================
 # ==========================================
 
 # 1️⃣ صمام الأمان العالمي (خارج الدالة لمنع الطلقة المزدوجة)
