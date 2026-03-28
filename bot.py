@@ -4588,8 +4588,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         else:
             await asyncio.sleep(0.2)
     # 7️⃣ إعلان لوحة الشرف النهائية 📊
-    # 7️⃣ إعلان لوحة الشرف النهائية 📊
-    # تأكد أن import asyncio موجود في أعلى الملف تماماً (Global)
+    # 7️⃣ إعلان لوحة الشرف النهائية 📊 (المسافة: 4 فراغات)
     target_quiz_id = active_quizzes.get(chat_id, {}).get('quiz_id')
     final_scores_from_db = {}
 
@@ -4597,10 +4596,10 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         try:
             loop = asyncio.get_event_loop()
             
-            # جلب البيانات من السجل لضمان الدقة
+            # 🚀 [التعديل الأول]: جلبنا "is_correct" أيضاً لنعرف عدد الإجابات
             response = await loop.run_in_executor(None, lambda: (
                 supabase.table("answers_log")
-                .select("user_id, user_name, points_earned")
+                .select("user_id, user_name, points_earned, is_correct")
                 .eq("quiz_id", target_quiz_id)
                 .eq("is_correct", True)
                 .execute()
@@ -4610,23 +4609,25 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 for row in response.data:
                     uid = row['user_id']
                     if uid not in final_scores_from_db:
-                        final_scores_from_db[uid] = {"name": row['user_name'], "points": 0}
+                        # 🚀 [التعديل الثاني]: أضفنا مفتاح correct_count هنا لكي تراه دالة المزامنة
+                        final_scores_from_db[uid] = {"name": row['user_name'], "points": 0, "correct_count": 0}
+                    
                     final_scores_from_db[uid]['points'] += row['points_earned']
+                    # زيادة عداد الإجابات الصحيحة
+                    final_scores_from_db[uid]['correct_count'] += 1
+                
+                logging.info(f"✅ تم حصاد {len(final_scores_from_db)} فائز مع عدّ إجاباتهم بدقة.")
             else:
-                # إذا لم نجد في سوبابيس، نسحب من الرام قبل حذفها
                 final_scores_from_db = overall_scores.get(chat_id, {})
         
         except Exception as e:
             logging.error(f"❌ خطأ جلب النتائج: {e}")
             final_scores_from_db = overall_scores.get(chat_id, {})
 
-    # 📤 إرسال لوحة الشرف (الآن)
+    # 📤 إرسال لوحة الشرف
     await send_final_results2(chat_id, final_scores_from_db, len(questions))
-
-    # 🚀 [ مهمة التنظيف والترحيل ]
-    # ملاحظة: أخرجنا القواميس من الرام "فوراً" لفتح المجال لمسابقة جديدة
-    # ونترك الترحيل الثقيل وسوبابيس للخلفية
-    
+    # بقية الكود (التنظيف والترحيل) سيعمل الآن بجدارة لأن "correct_count" صار موجوداً داخل "scores"
+    # ونترك الترحيل الثقيل وسوبابيس للخلفية    
     current_cat = active_quizzes.get(chat_id, {}).get('category', "عام")
 
     async def final_cleanup_process(tid, cid, scores, cat):
