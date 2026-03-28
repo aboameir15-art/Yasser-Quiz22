@@ -2354,7 +2354,7 @@ async def stop_quiz_handler(m: types.Message):
     user_text = m.text.strip()
     u_name = m.from_user.first_name
     
-    # 🕵️ [ الرادار المحلي ]
+    # 🕵️ [ الرادار المحلي ] - فحص وجود مسابقة فعلياً
     if cid not in active_quizzes: 
         return await m.reply("عذراً.. القاعة فارغة! لا يوجد اختبار نشط لإيقافه. 🏫")
 
@@ -2364,11 +2364,11 @@ async def stop_quiz_handler(m: types.Message):
     # 🛡️ [ فحص الأهلية - نقطة تفتيش أثير ]
     has_authority = False
     
-    # 1. هل هو المطور (أبو أمير)؟ 👑 (بشكل مشفر)
+    # 1. المطور الملكي (ADMIN)
     if str(uid) == str(os.getenv("ADMIN_ID")):
         has_authority = True
     
-    # 2. هل هو صاحب المسابقة أو مشرف في المجموعة؟ 🛡️
+    # 2. صاحب المسابقة أو مشرف المجموعة
     if not has_authority:
         if uid == owner_id:
             has_authority = True
@@ -2379,9 +2379,10 @@ async def stop_quiz_handler(m: types.Message):
                     has_authority = True
             except: pass
 
-    # 3. هل هو "خبير إجابات" (150+ إجابة صحيحة)؟ 🏆
+    # 3. نظام "خبير الإجابات" (نخبة اللاعبين)
     if not has_authority:
         try:
+            # جلب عدد الإجابات الصحيحة من بروفايله العالمي
             res_user = supabase.table("users_global_profile").select("correct_answers_count").eq("user_id", uid).execute()
             if res_user.data:
                 ans_count = res_user.data[0].get('correct_answers_count', 0)
@@ -2395,32 +2396,33 @@ async def stop_quiz_handler(m: types.Message):
             logging.error(f"Error in Stop Check: {e}")
             return
 
-    # 🚀 [ تنفيذ الإيقاف والقتل البرمجي للمهمة ] 🚀
+    # 🚀 [ تنفيذ الإغلاق القسري - تفعيل البروتوكول ] 🚀
     if has_authority:
-        # 1. إيقاف العلم فوراً لتنبيه المحرك
-        active_quizzes[cid]['active'] = False
+        # 1️⃣ كسر دورة المحرك اللحظية (Flag Break)
+        if cid in active_quizzes:
+            active_quizzes[cid]['active'] = False # هذا سيجعل الـ While loop تتوقف فوراً
         
-        # 2. ⚡ قتل المهمة برمجياً (منع العد التنازلي والقوالب)
-        if cid in quiz_tasks:
-            try:
-                quiz_tasks[cid].cancel() 
-                del quiz_tasks[cid]
-                logging.info(f"🛑 تم قتل مهمة المسابقة في {cid} بقرار من {u_name}")
+        # 2️⃣ إغلاق الاستطلاع المفتوح حالياً في تليجرام (إن وجد)
+        last_poll = active_quizzes.get(cid, {}).get('last_poll_id')
+        if last_poll:
+            try: await bot.stop_poll(cid, last_poll)
             except: pass
 
-        # 3. 🗳️ تنظيف الاستطلاعات (active_polls)
-        if 'active_polls' in globals() and cid in active_polls:
-            active_polls.pop(cid, None)
+        # 3️⃣ تصفير "ذاكرة الرصد السريع" (active_polls) لمنع أي تفاعل قديم
+        # نحذف كل الـ IDs المرتبطة بهذه المجموعة من الرام
+        keys_to_del = [k for k, v in active_polls.items() if v.get('chat_id') == cid]
+        for k in keys_to_del:
+            if k in active_polls: del active_polls[k]
 
-        # 4. تحرير القاعة العالمية (active_broadcasts) لفك حظر المجموعة
+        # 4️⃣ تحرير القاعة العالمية (فك حظر المجموعة من البث العام)
         active_broadcasts.discard(cid)
 
-        # 5. تصفير سجلات الرام
+        # 5️⃣ التطهير النهائي للرادار ومصفوفة النتائج
         active_quizzes.pop(cid, None)
         if cid in overall_scores: overall_scores.pop(cid, None)
 
-        # 📄 رسالة الإغلاق (بناءً على نوع الطلب)
-        role_tag = "👑 [قرار سيادي]" if str(uid) == str(os.getenv("ADMIN_ID")) else "🚫 [إيقاف إداري]"
+        # 📄 إعلان القرار (بناءً على الرتبة والطلب)
+        role_tag = "👑 [قرار سيادي]" if str(uid) == str(os.getenv("ADMIN_ID")) else "🛡️ [إيقاف إداري]"
         
         if user_text == "انسحاب":
             await m.answer(f"📉 <b>تم قبول الانسحاب!</b>\nبطلب من الخبير/المشرف: {u_name}\nتم سحب أوراق المجموعة وإغلاق المحرك فوراً. 🚶‍♂️", parse_mode="HTML")
@@ -2430,6 +2432,8 @@ async def stop_quiz_handler(m: types.Message):
                 f"{role_tag} <b>توقف المحرك!</b>\nتم إنهاء الاختبار وتطهير الرادار من كافة العمليات. 🧹"
             ]
             await m.answer(random.choice(academic_stops), parse_mode="HTML")
+        
+        logging.info(f"🛑 تم تصفير القاعة {cid} يدوياً بواسطة {u_name}")
         
 # ==========================================
 # 2️⃣ المعالج الرئيسي للأوامر (عني، رتبتي، إلخ)
