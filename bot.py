@@ -5006,74 +5006,72 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 count_tasks = [run_countdown(cid) for cid in all_chats]
                 await asyncio.gather(*count_tasks, return_exceptions=True)
             else:
-                await asyncio.sleep(2)
-
-        
+                await asyncio.sleep(2)       
         # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
-        for cid in all_chats:
-            try: 
-                # أ. إرسال لوحة النتائج النهائية للمجموعة
-                await send_broadcast_final_results(
-                    chat_id=cid, 
-                    scores=group_scores, 
-                    total_q=total_q, 
-                    group_names=group_names_map
-                )
-                await asyncio.sleep(0.2) # نفس بسيط للبوت بين المجموعات
-            except Exception as e: 
-                logging.error(f"Error in final results for {cid}: {e}")
-            
-            # ب. تنظيف رسائل الأسئلة والنتائج المؤقتة (مع نظام حماية من الـ Flood)
-            all_mids = messages_to_delete.get(cid, []) + results_to_delete.get(cid, [])
-            for i, mid in enumerate(all_mids):
-                try: 
-                    await bot.delete_message(cid, mid)
-                    # كل 5 رسائل نحذفها، ننتظر ثانية عشان تلجرام ما يزعل
-                    if i % 5 == 0:
-                        await asyncio.sleep(1)
-                except: 
-                    pass
-       
-        # 🚀 [ الخطوة الجوهرية: ترحيل النقاط من السجل الرقمي ] 🚀
-        try:
-            if current_quiz_db_id:
-                # 1. جلب "الحصاد الدقيق" من سجل الإجابات
-                log_res = supabase.table("answers_log").select("*").eq("quiz_id", current_quiz_db_id).execute()
+        # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️ (المسافة: 8 فراغات)
+        async def broadcast_cleanup_worker():
+            try:
+                # أ. إرسال النتائج لكل المجموعات (توازي خفيف)
+                for cid in all_chats:
+                    try:
+                        await send_broadcast_final_results(
+                            chat_id=cid, 
+                            scores=group_scores, 
+                            total_q=total_q, 
+                            group_names=group_names_map
+                        )
+                        await asyncio.sleep(0.1) # سرعة أعلى لتجنب الملل
+                    except: continue
+
+                # ب. الجرد والترحيل من سوبابيس (مرة واحدة فقط)
+                if current_quiz_db_id:
+                    # جلب البيانات لمرة واحدة بدلاً من تكرار الطلب
+                    log_res = await loop.run_in_executor(None, lambda: (
+                        supabase.table("answers_log").select("*").eq("quiz_id", current_quiz_db_id).execute()
+                    ))
+                    
+                    if log_res.data:
+                        # المزامنة العالمية (الاستدعاء الآمن)
+                        await sync_points_to_global_db(group_scores={}, quiz_id=current_quiz_db_id, cat_name=cat_name)
+                        logging.info("✅ تم الترحيل العالمي من سجل الإجابات.")
+
+                    # 🔥 [ المحرقة ] - حذف الأب يمسح سجلات الإجابات والمشاركين (CASCADE)
+                    await asyncio.sleep(1)
+                    await loop.run_in_executor(None, lambda: (
+                        supabase.table("active_quizzes").delete().eq("id", current_quiz_db_id).execute()
+                    ))
+
+                # ج. تنظيف الرسائل (آخر خطوة وبأقل استهلاك)
+                for cid in all_chats:
+                    all_mids = messages_to_delete.get(cid, []) + results_to_delete.get(cid, [])
+                    for i, mid in enumerate(all_mids):
+                        try:
+                            await bot.delete_message(cid, mid)
+                            if i % 8 == 0: await asyncio.sleep(1.5) # حماية قصوى من الـ Flood
+                        except: pass
                 
-                if log_res.data:
-                    # 2. تحديث إحصائيات المجموعات
-                    for cid in all_chats:
-                        members_in_log = len(set([r['user_id'] for r in log_res.data if r['chat_id'] == cid]))
-                        if members_in_log > 0:
-                            supabase.table("groups_global_stats").update({
-                                "members_count": members_in_log
-                            }).eq("group_id", cid).execute()
+                logging.info(f"🧹 تم تطهير نظام الإذاعة بالكامل للمسابقة {current_quiz_db_id}")
 
-                    # 3. المزامنة العالمية (تعديل الاستدعاء ليكون آمناً)
-                    # لاحظ أرسلنا group_scores={} لمنع خطأ الـ NoneType داخل الدالة
-                    await sync_points_to_global_db(
-                        group_scores={}, 
-                        quiz_id=current_quiz_db_id, 
-                        cat_name=cat_name
-                    )
-                    logging.info("✅ تم الجرد والترحيل من سجل الإجابات بنجاح.")
+            except Exception as e:
+                logging.error(f"🚨 Background Broadcast Cleanup Error: {e}")
 
-                # 🔥 [ التشطيب النهائي: تفريغ سوبابيس ] 🔥
-                # نحذف "الأب" وبسبب CASCADE يختفي اللوج والمشاركين فوراً
-                await asyncio.sleep(0.8) # انتظار بسيط للتأكد من انتهاء كل العمليات
-                supabase.table("active_quizzes").delete().eq("id", current_quiz_db_id).execute()
-                logging.info(f"🧹 تم تطهير النظام بالكامل للمسابقة {current_quiz_db_id}")
-        
-        except Exception as sync_err:
-            logging.error(f"🚨 خطأ أثناء الترحيل من السجل أو التنظيف: {sync_err}")
+        # 🚀 إطلاق "عامل التنظيف" في الخلفية (هذا يمنع البوت من النوم)
+        import asyncio
+        loop = asyncio.get_event_loop()
+        asyncio.create_task(broadcast_cleanup_worker())
 
     except Exception as e:
         logging.error(f"🚨 Global Engine Fatal Error: {e}")
     finally:
-        # 🔓 فتح القفل للسماح ببدء إذاعة جديدة
-        for cid in all_chats: active_broadcasts.discard(cid)
+        # 🔓 فتح القفل الفوري (هذا يسمح ببدء إذاعة جديدة فوراً)
+        for cid in all_chats: 
+            active_broadcasts.discard(cid)
+            # تصفير الذاكرة الرام فوراً لضمان عدم تداخل البيانات
+            if cid in active_quizzes: del active_quizzes[cid]
+            if cid in overall_scores: del overall_scores[cid]
         
-            
+        logging.info("✨ المحرك جاهز لاستقبال مهمة إذاعة جديدة.")
+
 # =======================================
 # --- [ بداية الدالة من العمود 0 لضمان عدم وجود SyntaxError ] ---
 import re
