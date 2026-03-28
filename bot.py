@@ -4742,15 +4742,21 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         except Exception as e:
             logging.error(f"⚠️ فشل التنظيف النهائي: {e}")
 
-    # إطلاق المهمة الثقيلة في الخلفية
-    asyncio.create_task(final_cleanup_process(target_quiz_id, chat_id, final_scores_from_db, current_cat))
+    # إطلاق مهمة الخلفية مع تمرير كافة الوسائط المطلوبة
+    asyncio.create_task(final_cleanup_process(
+        target_quiz_id, 
+        chat_id, 
+        final_scores_from_db, 
+        current_cat, 
+        (questions_to_delete + results_to_delete) # تأكد من وجود هذا المدخل الخامس
+    ))
 
-    # تنظيف الرسائل (بشكل متوازٍ وسريع)
-    for q_mid in (questions_to_delete + results_to_delete):
-        try: await bot.delete_message(chat_id, q_mid)
-        except: pass
+    # تحرير القاعة فوراً (فتح القفل المنطقي)
+    active_broadcasts.discard(chat_id) 
+    
+    logging.info(f"✅ تم تحرير القاعة {chat_id} وجاري التنظيف في الخلفية...")
+
 # ==========================================
-
 # 1️⃣ صمام الأمان العالمي (خارج الدالة لمنع الطلقة المزدوجة)
 active_broadcasts = set()
 
