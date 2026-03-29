@@ -4583,6 +4583,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id
 
         # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري ]
+        # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري ]
         start_time = time.time()
         t_limit = int(quiz_data.get('time_limit', 15))
 
@@ -4593,23 +4594,23 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 if poll_id_to_kill:
                     try: await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_kill)
                     except: pass
-                logging.info(f"🛑 تم إيقاف المحرك نهائياً في {chat_id}")
-                return # 👈 هروب نهائي (Kill Task)
+                logging.info(f"🛑 إيقاف نهائي للمحرك في {chat_id}")
+                return # 👈 خروج نهائي من الدالة (Kill Task)
 
-            # ⚡ [ مكبح السرعة: فحص هل انتهى السؤال بإجابة صحيحة؟ ]
+            # ⚡ [ مكبح السرعة: التحسس من سطر 'question_finished' ]
             if active_quizzes[chat_id].get('question_finished'):
-                logging.info(f"⚡ إجابة سريعة! كسر الانتظار والانتقال للنتائج في {chat_id}")
-                break 
+                logging.info(f"⚡ تم رصد إجابة سريعة! كسر الانتظار في {chat_id}")
+                break # 👈 يكسر الـ while فقط ويكمل لعرض النتائج
 
             await asyncio.sleep(0.1)
 
-        # 🛑 [ إغلاق الاستطلاع بعد انتهاء الوقت أو الإجابة ]
+        # 🛑 [ إغلاق الاستطلاع وتحديث القاعدة ]
         if chat_id in active_quizzes:
             poll_id_to_stop = active_quizzes[chat_id].get('last_poll_id')
             if poll_id_to_stop:
                 try:
                     await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_stop)
-                    # ✅ تحديث سوبابيس لإنهاء "السؤال" وليس المسابقة
+                    # تحديث سوبابيس لإنهاء حالة السؤال
                     if current_quiz_id:
                         supabase.table("active_quizzes").update({
                             "question_finished": True 
@@ -4619,9 +4620,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
 
         # 5️⃣ إنهاء السؤال وعرض النتائج
         if chat_id in active_quizzes:
-            # ❌ حذفنا سطر active = False لأنه يقتل المسابقة
-            
-            # 🕵️ [ مكبح المحطة الثالثة: فحص قبل عرض نتائج السؤال ]
+            # 🕵️ [ مكبح الأمان: فحص قبل عرض النتائج ]
             if not active_quizzes[chat_id].get('active'):
                 logging.info(f"🛑 تم إيقاف عرض النتائج في {chat_id} - انسحاب")
                 return 
@@ -4643,6 +4642,8 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     results_to_delete.append(res_msg.message_id)
             else:
                 logging.info(f"✨ نظام اختيارات: تسجيل الفوز صامتاً في {chat_id}")
+                
+        
         # 6️⃣ [ ⏱️ محرك العداد التنازلي المطور مع مكابح داخلية ]
         if i < len(questions) - 1:
             # 🕵️ [ مكبح المحطة الرابعة: فحص قبل بدء العداد التنازلي ]
@@ -5466,7 +5467,7 @@ async def unified_answer_checker(m: types.Message):
                     
                     # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
                     if quiz.get('mode') == 'السرعة ⚡':
-                        quiz['active'] = False
+                        quiz['question_finished'] = True # علامة لإنهاء السؤال فقط
                     return
 
 # ==========================================
