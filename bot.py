@@ -4651,12 +4651,12 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
                 return
 
-            icons = ["⚪", "🔵", "🟢", "🟡", "🟠", "🔴"]
+            icons = ["⚪", "🟢", "🔴"]
             try:
                 countdown_msg = await bot.send_message(chat_id, f"⌛ استعدوا.. السؤال التالي يبدأ بعد قليل...")
                 
                 # عداد ذكي (5 ثوانٍ) يفحص "البريك" في كل ثانية
-                for count in range(5, 0, -1):
+                for count in range(3, 0, -1):
                     # 🔍 التفتيش اللحظي داخل العداد
                     if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
                         await countdown_msg.delete()
