@@ -4544,7 +4544,6 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     "quiz_style": style,
                     "is_active": True,
                     "question_finished": True,
-                    "question_finished": False, # 👈 تصفير عمود المطفي في سوبابيس مع كل سؤال جديد
                     "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0},
                     "voter_list": {},
                     "user_choices": {}
