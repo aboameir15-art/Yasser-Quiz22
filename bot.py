@@ -77,7 +77,8 @@ answered_users_global = {}
 
 # 📋 قاموس تعقب المهام الجارية (يوضع في أعلى الملف)
 quiz_tasks = {}
- 
+overall_scores = {}
+
 async def send_log(error_type, error_details, chat_id=None, user_id=None):
         """
         إرسال تقرير خطأ مفصل إلى الوجهة المشفرة (LOG_GROUP_ID)
@@ -4971,30 +4972,35 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         results_to_delete = {cid: [] for cid in all_chats}
 
         # 🟢 [ الخطوة 1: المشرف ] إنشاء سجل المسابقة المركزي
+        # 🟢 [ الخطوة 1: المشرف ] إنشاء سجل المسابقة المركزي
         try:
             creator_id = quiz_data.get('owner_id') or quiz_data.get('created_by') or 0
-            owner_name_str = quiz_data.get('owner_name') or "مجهول" # جلب اسم القائد
+            owner_name_str = quiz_data.get('owner_name') or "مجهول" 
+
+            # ✅ الإصلاح الجذري لخطأ 22P02: تحويل كل الآيديهات لنصوص صريحة
+            # سوبابيس يحتاج النصوص داخل الـ JSON ليتعامل مع الأرقام السالبة الطويلة
+            safe_participants = [str(c) for c in chats_to_broadcast]
             
             quiz_entry = supabase.table("active_quizzes").insert({
                 "quiz_name": f"إذاعة {owner_name_str}",
                 "created_by": creator_id,
                 "is_global": True,
                 "is_active": True,
-                "participants_ids": [group_names_map.get(str(c), str(c)) for c in chats_to_broadcast],
+                "participants_ids": safe_participants, # 👈 تم التعديل هنا ليكون مصفوفة نصوص
                 "total_questions": total_q,
                 "category_name": main_cat_name, 
                 "quiz_style": current_style,
-                # 🔥 [ الإضافات الجديدة للسجل المركزي ] 🔥
                 "quiz_type": "public",
                 "quiz_owner_id": creator_id,
                 "quiz_owner_name": owner_name_str,
-                "is_paused": False # يبدأ البث بدون بريك بطبيعة الحال
+                "is_paused": False 
             }).execute()
 
             if quiz_entry.data:
                 current_quiz_db_id = quiz_entry.data[0]['id']
                 logging.info(f"✅ سجل active_quizzes جاهز ID: {current_quiz_db_id}")
 
+                # إصلاح إرسال الآيدي في جدول المشاركين أيضاً
                 participants_records = [{"quiz_id": current_quiz_db_id, "chat_id": cid} for cid in chats_to_broadcast]
                 supabase.table("quiz_participants").insert(participants_records).execute()
 
@@ -5032,7 +5038,8 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 cat_name = q['categories']['name'] if (q.get('categories') and isinstance(q['categories'], dict)) else "عام"
             
             # 🔵 [ الخطوة 3 ] تحديث المشرف (active_quizzes) - المزامنة اللحظية
-            if current_quiz_db_id:
+            if current_quiz_db_id:                
+            
                 try:
                     supabase.table("active_quizzes").update({
                         "current_answer": ans,
@@ -5334,18 +5341,12 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         logging.error(f"🚨 Global Engine Fatal Error: {e}")
     
     finally:
-        # 🔓 [ فك القفل وتصفير الرام النهائي ] 
-        # هذه الخطوة تضمن أن البوت مستعد لبدء مسابقة جديدة فوراً
         for cid in all_chats: 
             active_broadcasts.discard(cid)
-            if cid in active_quizzes:
-                # حذف شامل لكل بيانات المسابقة في هذه المجموعة من الرام
-                active_quizzes.pop(cid, None)
-            
-            # تنظيف قائمة النتائج المؤقتة
-            if cid in overall_scores:
+            if cid in active_quizzes: del active_quizzes[cid]
+            # استخدام get لتجنب الخطأ إذا لم يكن موجوداً
+            if cid in overall_scores: 
                 overall_scores.pop(cid, None)
-        
         logging.info("✨ تم تنظيف الذاكرة بالكامل.. نظام الإذاعة في وضع الاستعداد.")
       
 
