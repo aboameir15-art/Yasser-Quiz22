@@ -4733,17 +4733,17 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
 
     # 2. تصفير "الرادار المحلي" (active_quizzes)
     # 5️⃣ تنظيف بيانات السؤال (وليس المسابقة!) 🧹
-        if chat_id in active_quizzes:
+    if chat_id in active_quizzes:
             # ❌ حذفنا سطر active = False وحذفنا del
             
             # ✅ نصفر فقط ما يخص السؤال الحالي للاستعداد للقادم
-            active_quizzes[chat_id].update({
-                "question_finished": True, # السؤال انتهى
-                "winners": [],              # تصفير الفائزين للسؤال الجديد
-                "voted_users": [],          # تصفير المصوتين للسؤال الجديد
-                "ans": None                 # مسح الإجابة القديمة مؤقتاً
-            })
-            logging.info(f"🧹 تم تجهيز الرادار للسؤال القادم في {chat_id}")
+        active_quizzes[chat_id].update({
+            "question_finished": True, # السؤال انتهى
+            "winners": [],              # تصفير الفائزين للسؤال الجديد
+            "voted_users": [],          # تصفير المصوتين للسؤال الجديد
+            "ans": None                 # مسح الإجابة القديمة مؤقتاً
+        })
+        logging.info(f"🧹 تم تجهيز الرادار للسؤال القادم في {chat_id}")
             
 
     # 3. تصفير مصفوفة النقاط المؤقتة
