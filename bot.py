@@ -4581,7 +4581,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         if isinstance(q_msg, types.Message):
             questions_to_delete.append(q_msg.message_id)
             active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id
-        
+
         # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري ]
         start_time = time.time()
         t_limit = int(quiz_data.get('time_limit', 15))
@@ -4589,19 +4589,17 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         while time.time() - start_time < t_limit:
             # 🕵️ [ مكبح السيادة: فحص الانسحاب الكلي ]
             if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
-                # في حالة الانسحاب الكلي، نقتل المهمة تماماً
                 poll_id_to_kill = active_quizzes.get(chat_id, {}).get('last_poll_id')
                 if poll_id_to_kill:
                     try: await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_kill)
                     except: pass
                 logging.info(f"🛑 تم إيقاف المحرك نهائياً في {chat_id}")
-                return # 👈 الهروب النهائي (Kill Task)
+                return # 👈 هروب نهائي (Kill Task)
 
             # ⚡ [ مكبح السرعة: فحص هل انتهى السؤال بإجابة صحيحة؟ ]
-            # هنا نفحص المفتاح الجديد الذي سنضعه في المعالج (question_finished)
             if active_quizzes[chat_id].get('question_finished'):
                 logging.info(f"⚡ إجابة سريعة! كسر الانتظار والانتقال للنتائج في {chat_id}")
-                break # 👈 يكسر الـ while فقط ويذهب للقسم 5 (النتائج) ثم يكمل الحلقة
+                break 
 
             await asyncio.sleep(0.1)
 
@@ -4611,25 +4609,25 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             if poll_id_to_stop:
                 try:
                     await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_stop)
-                                      
-                    # تحديث سوبابيس لإيقاف السؤال برمجياً
+                    # ✅ تحديث سوبابيس لإنهاء "السؤال" وليس المسابقة
                     if current_quiz_id:
                         supabase.table("active_quizzes").update({
-                            "is_active": False 
+                            "question_finished": True 
                         }).eq("id", current_quiz_id).execute()
                 except Exception as e:
-                    logging.warning(f"⚠️ لم يتم إغلاق الاستطلاع (قد يكون مغلقاً بالفعل): {e}")              
+                    logging.warning(f"⚠️ الاستطلاع مغلق مسبقاً: {e}")
 
         # 5️⃣ إنهاء السؤال وعرض النتائج
         if chat_id in active_quizzes:
-            active_quizzes[chat_id]['active'] = False
-            current_winners = active_quizzes[chat_id].get('winners', [])
+            # ❌ حذفنا سطر active = False لأنه يقتل المسابقة
             
             # 🕵️ [ مكبح المحطة الثالثة: فحص قبل عرض نتائج السؤال ]
             if not active_quizzes[chat_id].get('active'):
                 logging.info(f"🛑 تم إيقاف عرض النتائج في {chat_id} - انسحاب")
-                return # خروج قطعي ومنع الانتقال للعداد
-                
+                return 
+
+            current_winners = active_quizzes[chat_id].get('winners', [])
+            
             # تسجيل النقاط في الذاكرة (overall_scores)
             for w in current_winners:
                 uid = w['id']
@@ -4645,7 +4643,6 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     results_to_delete.append(res_msg.message_id)
             else:
                 logging.info(f"✨ نظام اختيارات: تسجيل الفوز صامتاً في {chat_id}")
-                
         # 6️⃣ [ ⏱️ محرك العداد التنازلي المطور مع مكابح داخلية ]
         if i < len(questions) - 1:
             # 🕵️ [ مكبح المحطة الرابعة: فحص قبل بدء العداد التنازلي ]
