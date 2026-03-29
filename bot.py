@@ -4514,14 +4514,16 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             cat_name = "مخصص 🔒"
             
         # 2️⃣ تحديث الذاكرة النشطة للبوت (الرادار المحلي)
+        style = quiz_data.get('quiz_style', 'اختيارات 📊')
+        
         active_quizzes[chat_id].update({
             "active": True, 
-            "question_finished": False, # 👈 تصفير العلامة مع كل سؤال جديد
+            "question_finished": False, # 👈 تصفير عمود المطفي في الرام
             "ans": ans, 
             "winners": [], 
             "voted_users": [], 
-            "mode": quiz_data['mode'], 
-            "quiz_style": quiz_data.get('quiz_style', 'اختيارات 📊'),
+            "mode": quiz_data.get('mode', 'السرعة ⚡'), 
+            "quiz_style": style,
             "quiz_id": current_quiz_id,
             "category": cat_name,
             "current_index": i + 1,
@@ -4534,18 +4536,21 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         # 3️⃣ [ التحديث اللحظي لقاعدة البيانات ] 🚀
         if current_quiz_id:
             try:
+                # تحديث سوبابيس ليتوافق 100% مع أعمدة جدولك الجديد
                 supabase.table("active_quizzes").update({
                     "current_index": i + 1,
                     "current_answer": ans,
                     "question_category_name": cat_name,
+                    "quiz_style": style,
                     "is_active": True,
+                    "question_finished": False, # 👈 تصفير عمود المطفي في سوبابيس مع كل سؤال جديد
                     "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0},
                     "voter_list": {},
                     "user_choices": {}
                 }).eq("id", current_quiz_id).execute()
-                logging.info(f"🔄 تم تحديث السؤال {i+1} في سوبابيس")
+                logging.info(f"🔄 تم تحديث السؤال {i+1} في سوبابيس وتصفير البريك")
             except Exception as e:
-                logging.error(f"❌ فشل تحديث سوبابيس: {e}")
+                logging.error(f"❌ فشل تحديث سوبابيس: {e}")                
 
         # --- [ نظام التلميح العادي البسيط ] ---
         normal_hint_str = ""
