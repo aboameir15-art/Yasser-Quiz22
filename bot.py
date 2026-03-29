@@ -4606,18 +4606,25 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             if poll_id_to_stop:
                 try:
                     await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_stop)
-                except: pass
-               
+                                      
+                    # تحديث سوبابيس لإيقاف السؤال برمجياً
+                    if current_quiz_id:
+                        supabase.table("active_quizzes").update({
+                            "is_active": False 
+                        }).eq("id", current_quiz_id).execute()
+                except Exception as e:
+                    logging.warning(f"⚠️ لم يتم إغلاق الاستطلاع (قد يكون مغلقاً بالفعل): {e}")              
+
         # 5️⃣ إنهاء السؤال وعرض النتائج
         if chat_id in active_quizzes:
+            active_quizzes[chat_id]['active'] = False
+            current_winners = active_quizzes[chat_id].get('winners', [])
+            
             # 🕵️ [ مكبح المحطة الثالثة: فحص قبل عرض نتائج السؤال ]
             if not active_quizzes[chat_id].get('active'):
                 logging.info(f"🛑 تم إيقاف عرض النتائج في {chat_id} - انسحاب")
                 return # خروج قطعي ومنع الانتقال للعداد
-
-            # إيقاف حالة السؤال الحالي 
-            current_winners = active_quizzes[chat_id].get('winners', [])
-            
+                
             # تسجيل النقاط في الذاكرة (overall_scores)
             for w in current_winners:
                 uid = w['id']
@@ -5457,9 +5464,9 @@ async def unified_answer_checker(m: types.Message):
                     
                     # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
                     if quiz.get('mode') == 'السرعة ⚡':
-                        quiz['question_finished'] = True # علامة لإنهاء السؤال فقط
+                        quiz['active'] = False
                     return
-                    
+
 # ==========================================
 # --- [ رادار إجابات الـ Poll الهجين المطور + نظام حماية الغش ] ---
 # ==========================================
