@@ -4583,7 +4583,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id
 
         # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري ]
-        # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري ]
+        # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري ]        
         start_time = time.time()
         t_limit = int(quiz_data.get('time_limit', 15))
 
@@ -4618,29 +4618,25 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 except Exception as e:
                     logging.warning(f"⚠️ الاستطلاع مغلق مسبقاً: {e}")
         # 5️⃣ إنهاء السؤال وعرض النتائج
-        # 5️⃣ إنهاء السؤال وحساب النقاط (التعديل الصحيح والمستقر 🔥)
+        # 5️⃣ إنهاء السؤال وحساب النقاط (النسخة النظيفة 🔥)
         if chat_id in active_quizzes:
-            # 🕵️ [ مكبح الأمان: فحص قبل عرض النتائج ]
+            # 🕵️ مكبح الأمان: فحص الانسحاب
             if not active_quizzes[chat_id].get('active'):
                 logging.info(f"🛑 تم إيقاف عرض النتائج في {chat_id} - انسحاب")
                 return 
 
-            # ✅ نغلق السؤال الحالي فقط ولا نلمس 'active' العامة للمسابقة
+            # ✅ إغلاق السؤال الحالي للبدء في اللي بعده
             active_quizzes[chat_id]['question_finished'] = True
             
-            # نجلب الفائزين الذين سجلهم "الرادار"
+            # جلب الفائزين وحساب النقاط
             current_winners = active_quizzes[chat_id].get('winners', [])
-            
-            # 🔥 تحديث النقاط في الذاكرة (overall_scores)
             for w in current_winners:
                 uid = w['id']
                 if uid not in overall_scores:
                     overall_scores[uid] = {"name": w['name'], "points": 0}
-                
-                # إضافة النقاط للسؤال الحالي
                 overall_scores[uid]['points'] += 1
 
-            # 🛑 عرض القالب (فقط لنظام الكتابة/المباشر)
+            # عرض القالب (لنظام الكتابة والمباشر)
             current_style = active_quizzes[chat_id].get('quiz_style', '')
             if current_style != 'اختيارات 📊':
                 res_msg = await send_creative_results2(chat_id, ans, current_winners, overall_scores)
@@ -4648,7 +4644,10 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     results_to_delete.append(res_msg.message_id)
             else:
                 logging.info(f"✨ نظام اختيارات: تسجيل الفوز صامتاً في {chat_id}")
-                
+            
+            # ⏳ الفراغ الزمني (راحة 8 ثوانٍ) قبل السؤال القادم
+            await asyncio.sleep(1)
+
         # 6️⃣ [ ⏱️ محرك العداد التنازلي المطور مع مكابح داخلية ]
         if i < len(questions) - 1:
             # 🕵️ [ مكبح المحطة الرابعة: فحص قبل بدء العداد التنازلي ]
@@ -5398,12 +5397,12 @@ async def unified_answer_checker(m: types.Message):
             if is_already_winner_globally:
                 logging.info(f"🚫 محاولة تكرار مرفوضة من {m.from_user.first_name}")
                 return
-
+            # 🛑 [نظام الإغلاق العالمي الفوري] ⚡ (وضع السرعة)
             # 🛑 [نظام الإغلاق العالمي الفوري] ⚡ (وضع السرعة)
             if quiz.get('mode') == 'السرعة ⚡':
                 for p_cid in p_ids:
                     if p_cid in active_quizzes:
-                        active_quizzes[p_cid]['active'] = False
+                        active_quizzes[p_cid]['question_finished'] = True # ✅ نغلق السؤال فقط
                 
                 logging.info(f"⚡ إغلاق عالمي: البطل {m.from_user.first_name} حسمها بلقب {s_title} في {t:.2f} ثانية.")
 
