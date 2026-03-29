@@ -4732,10 +4732,19 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
     logging.info(f"🧹 تم تصفير {len(active_polls_keys)} سجل من ذاكرة الاختيارات (active_polls)")
 
     # 2. تصفير "الرادار المحلي" (active_quizzes)
-    if chat_id in active_quizzes:
-        active_quizzes[chat_id]['active'] = False
-        del active_quizzes[chat_id]
-        logging.info(f"🧹 تم تنظيف الرادار المحلي للمجموعة {chat_id}")
+    # 5️⃣ تنظيف بيانات السؤال (وليس المسابقة!) 🧹
+        if chat_id in active_quizzes:
+            # ❌ حذفنا سطر active = False وحذفنا del
+            
+            # ✅ نصفر فقط ما يخص السؤال الحالي للاستعداد للقادم
+            active_quizzes[chat_id].update({
+                "question_finished": True, # السؤال انتهى
+                "winners": [],              # تصفير الفائزين للسؤال الجديد
+                "voted_users": [],          # تصفير المصوتين للسؤال الجديد
+                "ans": None                 # مسح الإجابة القديمة مؤقتاً
+            })
+            logging.info(f"🧹 تم تجهيز الرادار للسؤال القادم في {chat_id}")
+            
 
     # 3. تصفير مصفوفة النقاط المؤقتة
     if chat_id in overall_scores:
