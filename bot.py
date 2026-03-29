@@ -5467,7 +5467,7 @@ async def unified_answer_checker(m: types.Message):
                     
                     # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
                     if quiz.get('mode') == 'السرعة ⚡':
-                        quiz['question_finished'] = True # علامة لإنهاء السؤال فقط
+                        quiz['question_finished'] = False# علامة لإنهاء السؤال فقط
                     return
 
 # ==========================================
