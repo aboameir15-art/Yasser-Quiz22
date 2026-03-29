@@ -4518,7 +4518,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         
         active_quizzes[chat_id].update({
             "active": True, 
-            "question_finished": True, # 👈 تصفير عمود المطفي في الرام
+            "question_finished": False, # 👈 تصفير عمود المطفي في الرام
             "ans": ans, 
             "winners": [], 
             "voted_users": [], 
@@ -4543,7 +4543,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     "question_category_name": cat_name,
                     "quiz_style": style,
                     "is_active": True,
-                    "question_finished": True,
+                    "question_finished": False,
                     "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0},
                     "voter_list": {},
                     "user_choices": {}
@@ -4613,7 +4613,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                     # تحديث سوبابيس لإنهاء حالة السؤال
                     if current_quiz_id:
                         supabase.table("active_quizzes").update({
-                            "question_finished": False 
+                            "question_finished": True 
                         }).eq("id", current_quiz_id).execute()
                 except Exception as e:
                     logging.warning(f"⚠️ الاستطلاع مغلق مسبقاً: {e}")
@@ -5467,7 +5467,7 @@ async def unified_answer_checker(m: types.Message):
                     
                     # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
                     if quiz.get('mode') == 'السرعة ⚡':
-                        quiz['question_finished'] = False# علامة لإنهاء السؤال فقط
+                        quiz['question_finished'] = True# علامة لإنهاء السؤال فقط
                     return
 
 # ==========================================
