@@ -4516,6 +4516,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         # 2️⃣ تحديث الذاكرة النشطة للبوت (الرادار المحلي)
         active_quizzes[chat_id].update({
             "active": True, 
+            "question_finished": False, # 👈 تصفير العلامة مع كل سؤال جديد
             "ans": ans, 
             "winners": [], 
             "voted_users": [], 
@@ -4581,29 +4582,32 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         t_limit = int(quiz_data.get('time_limit', 15))
 
         while time.time() - start_time < t_limit:
-            # 🕵️ [ مكبح السيادة: فحص الانسحاب كل 0.1 ثانية ]
+            # 🕵️ [ مكبح السيادة: فحص الانسحاب الكلي ]
             if chat_id not in active_quizzes or not active_quizzes[chat_id].get('active'):
-                # قتل الاستطلاع فوراً قبل الخروج النهائي
+                # في حالة الانسحاب الكلي، نقتل المهمة تماماً
                 poll_id_to_kill = active_quizzes.get(chat_id, {}).get('last_poll_id')
                 if poll_id_to_kill:
                     try: await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_kill)
                     except: pass
-                logging.info(f"🛑 تم تفعيل المكبح أثناء انتظار الإجابة في {chat_id}")
-                return # 👈 هروب نهائي من الدالة (Kill Task)
+                logging.info(f"🛑 تم إيقاف المحرك نهائياً في {chat_id}")
+                return # 👈 الهروب النهائي (Kill Task)
+
+            # ⚡ [ مكبح السرعة: فحص هل انتهى السؤال بإجابة صحيحة؟ ]
+            # هنا نفحص المفتاح الجديد الذي سنضعه في المعالج (question_finished)
+            if active_quizzes[chat_id].get('question_finished'):
+                logging.info(f"⚡ إجابة سريعة! كسر الانتظار والانتقال للنتائج في {chat_id}")
+                break # 👈 يكسر الـ while فقط ويذهب للقسم 5 (النتائج) ثم يكمل الحلقة
 
             await asyncio.sleep(0.1)
 
-        # 🛑 [ إغلاق الاستطلاع بعد انتهاء الوقت الطبيعي ]
+        # 🛑 [ إغلاق الاستطلاع بعد انتهاء الوقت أو الإجابة ]
         if chat_id in active_quizzes:
             poll_id_to_stop = active_quizzes[chat_id].get('last_poll_id')
             if poll_id_to_stop:
                 try:
                     await bot.stop_poll(chat_id=chat_id, message_id=poll_id_to_stop)
-                    if current_quiz_id:
-                        supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_id).execute()
-                except Exception as e:
-                    logging.warning(f"⚠️ الاستطلاع مغلق مسبقاً: {e}")
-
+                except: pass
+               
         # 5️⃣ إنهاء السؤال وعرض النتائج
         if chat_id in active_quizzes:
             # 🕵️ [ مكبح المحطة الثالثة: فحص قبل عرض نتائج السؤال ]
@@ -5453,8 +5457,9 @@ async def unified_answer_checker(m: types.Message):
                     
                     # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
                     if quiz.get('mode') == 'السرعة ⚡':
-                        quiz['active'] = False
+                        quiz['question_finished'] = True # علامة لإنهاء السؤال فقط
                     return
+                    
 # ==========================================
 # --- [ رادار إجابات الـ Poll الهجين المطور + نظام حماية الغش ] ---
 # ==========================================
