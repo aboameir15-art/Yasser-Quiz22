@@ -2281,6 +2281,16 @@ async def sync_quiz_to_supabase(chat_id):
     except Exception as e:
         logging.error(f"❌ خطأ في مزامنة البيانات: {e}")
         
+
+async def get_user_answers_count(user_id: int) -> int:
+    try:
+        res = supabase.table("users_global_profile").select("correct_answers_count").eq("user_id", user_id).execute()
+        if res.data:
+            return res.data[0].get("correct_answers_count", 0)
+    except Exception as e:
+        logging.error(f"❌ فشل جلب عدد الإجابات للمستخدم {user_id}: {e}")
+    return 0
+
 # ==========================================
 # 4. حالات النظام (FSM States)
 # ==========================================
@@ -2349,146 +2359,135 @@ async def get_user_bank_card(message: types.Message):
 # ==========================================
 # 2️⃣ المعالج الرئيسي للأوامر (نظام المكابح الأكاديمي)
 # ==========================================
-@dp.message_handler(lambda m: m.text and m.text.strip() in ["زدني قف", "زدني توقف", "انسحاب"])
-async def stop_quiz_handler(m: types.Message):
-    cid, uid = m.chat.id, m.from_user.id
-    user_text = m.text.strip()
-    u_name = m.from_user.first_name
-    chat_type = m.chat.type
+@dp.message_handler(Text(equals=["زدني قف", "زدني توقف"], ignore_case=True), state="*")
+async def cmd_stop_quiz(message: types.Message, state: FSMContext):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
     
-    # 🕵️ [ الرادار المحلي ] - فحص وجود مسابقة نشطة
-    if cid not in active_quizzes: 
-        return await m.reply("عذراً.. القاعة فارغة! لا يوجد اختبار نشط حالياً للتحكم به. 🏫")
+    quiz_info = active_quizzes.get(chat_id)
+    if not quiz_info:
+        await message.reply("🤔 لا توجد مسابقة نشطة حالياً لإيقافها.")
+        return
 
-    quiz = active_quizzes.get(cid, {})
-    is_global = quiz.get('is_global', False)
-    owner_id = quiz.get('owner_id') or quiz.get('created_by')
+    is_global = quiz_info.get('quiz_type') == 'public' or quiz_info.get('is_global') == True
+    organizer_id = quiz_info.get('quiz_owner_id')
+    db_quiz_id = quiz_info.get('quiz_id')
+
+    # جلب عدد إجابات اللاعب من جدوله الشخصي
+    user_answers = await get_user_answers_count(user_id)
     
-    # 📊 [ فحص السجلات ] - جلب رصيد المستخدم من سوبابيس
-    ans_count = 0
-    try:
-        res_user = supabase.table("users_global_profile").select("correct_answers_count").eq("user_id", uid).execute()
-        if res_user.data:
-            ans_count = res_user.data[0].get('correct_answers_count', 0)
-    except Exception as e:
-        logging.error(f"Error fetching user profile: {e}")
-
-    # 🛡️ [ ميزان القوى ] - تحديد الصلاحيات
-    has_authority = False
-    is_admin_dev = str(uid) == str(os.getenv("ADMIN_ID")) # المطور الملكي
+    has_permission = False
     
-    if is_admin_dev:
-        has_authority = True
-
-    # --- [ أ - بروتوكول المسابقات العامة ] ---
-    if is_global:
-        if user_text in ["زدني قف", "زدني توقف"]:
-            # شرط الإيقاف العام: صاحب البث أو خبير (500+ إجابة)
-            if str(uid) == str(owner_id) or ans_count >= 500:
-                has_authority = True
-            else:
-                return await m.reply(f"⚠️ <b>عفواً يا {u_name}!</b>\nإيقاف المسابقة العامة يتطلب رتبة 'خبير عالمي' (500+ إجابة) أو أن تكون أنت مشغل البث. 📉")
-        
-        elif user_text == "انسحاب":
-            # 🎭 [ فخ صاحب المسابقة ] - ممنوع يدق الجرس ويهرب
-            if str(uid) == str(owner_id):
-                funny_denials = [
-                    f"😂 يا {u_name}، أنت اللي دقيت الجرس وتبي تنحاش؟ ما يصير! أنت القائد، لو تبي تنهيها قل 'زدني توقف'.",
-                    f"🏃‍♂️ تبي تدق الجرس وتهرب؟ عيب عليك! أنت مشغل البث، اطلب 'توقف' لو تبي تنهي الحفلة للكل.",
-                    f"🎭 نظام 'دق الجرس واهرب' ممنوع لأصحاب الفخامة! بما إنك مشغل المسابقة، قل 'زدني توقف' وأنهيها بهيبتك."
-                ]
-                return await m.reply(random.choice(funny_denials), parse_mode="HTML")
-            
-            # شروط الانسحاب للمجموعات الأخرى: مشرف أو (150+ إجابة)
-            is_group_admin = False
-            if chat_type in ['group', 'supergroup']:
-                try:
-                    member = await bot.get_chat_member(cid, uid)
-                    if member.status in ['creator', 'administrator']: is_group_admin = True
-                except: pass
-            
-            if is_group_admin or ans_count >= 150:
-                has_authority = True
-            else:
-                return await m.reply(f"⚠️ <b>عفواً!</b>\nالانسحاب متاح فقط لمشرفي القاعات أو الخبراء (150+ إجابة).\nرصيدك الحالي: {ans_count} 📉")
-
-    # --- [ ب - بروتوكول المسابقات الخاصة ] ---
+    # [ نظام الصلاحيات ]
+    if user_id == ADMIN_ID: # المطور (فيتو مطلق)
+        has_permission = True
     else:
-        if chat_type == 'private':
-            # في شات البوت: المالك فقط
-            if str(uid) == str(owner_id): has_authority = True
-        else:
-            # في المجموعات الخاصة: المالك أو المشرف أو (150+ إجابة)
-            is_group_admin = False
-            try:
-                member = await bot.get_chat_member(cid, uid)
-                if member.status in ['creator', 'administrator']: is_group_admin = True
-            except: pass
-            
-            if str(uid) == str(owner_id) or is_group_admin or ans_count >= 150:
-                has_authority = True
+        if not is_global:
+            # مسابقة خاصة
+            if message.chat.type == "private":
+                if user_id == organizer_id: 
+                    has_permission = True
             else:
-                return await m.reply(f"⚠️ التحكم في المسابقات الخاصة للمالك، المشرفين، أو الخبراء (150+) فقط!")
-
-    # 🚀 [ مرحلة التنفيذ - تطهير السجلات والرام ] 🚀
-    if has_authority:
-        # 🟢 الحالة الأولى: [ الانسحاب من البث ]
-        if user_text == "انسحاب":
-            try:
-                # 1. تنظيف المصفوفة في سوبابيس (حذف المجموعة من قائمة المشاركين)
-                res = supabase.table("active_quizzes").select("id, participants_ids").contains("participants_ids", [str(cid)]).execute()
-                if res.data:
-                    for row in res.data:
-                        current_p_ids = row.get('participants_ids', [])
-                        # تصفية القائمة وحذف الآيدي
-                        new_p_ids = [p for p in current_p_ids if str(p) != str(cid)]
-                        supabase.table("active_quizzes").update({"participants_ids": new_p_ids}).eq("id", row['id']).execute()
-
-                # 2. حذف السجل من جدول المشاركين الفرعي
-                supabase.table("quiz_participants").delete().eq("chat_id", cid).execute()
-                
-                # 3. تطهير الرام فوراً
-                active_broadcasts.discard(cid) # مسح من محرك البث
-                if cid in active_quizzes:
-                    active_quizzes[cid]['active'] = False # كسر الدورة
-                    active_quizzes.pop(cid, None) # مسح من الرادار
-                
-                if cid in overall_scores: overall_scores.pop(cid, None)
-
-                await m.answer(f"📉 <b>تم قبول الانسحاب!</b>\nيا {u_name}، تم حذف مجموعتك من 'قائمة البث المشترك' وتطهير الرام والقاعدة بنجاح. ✅", parse_mode="HTML")
-                logging.info(f"🚶‍♂️ انسحاب نظيف للمجموعة {cid}")
-            except Exception as e:
-                logging.error(f"Withdraw Error: {e}")
-
-        # 🔴 الحالة الثانية: [ الإيقاف الشامل - زدني توقف / قف ]
+                member = await message.chat.get_member(user_id)
+                is_admin = member.status in ['creator', 'administrator']
+                if user_id == organizer_id or is_admin or user_answers >= 150:
+                    has_permission = True
         else:
+            # مسابقة عامة (المنظم أو لاعب خارق 500+)
+            if user_id == organizer_id or user_answers >= 500:
+                has_permission = True
+
+    if not has_permission:
+        await message.reply(f"⛔ لا تملك الصلاحية لإيقاف المسابقة.\n(إجاباتك: {user_answers} | المطلوب للعامة: 500, للخاصة: 150 أو إشراف)")
+        return
+
+    # [ التنظيف الجراحي والتصفير ] 🧹
+    if is_global:
+        participating_chats = quiz_info.get('participants_ids', [])
+        for cid in participating_chats:
+            active_quizzes.pop(cid, None)
+    else:
+        active_quizzes.pop(chat_id, None)
+
+    # تنظيف الاستفتاءات المعلقة في الرام وحذفها من الشات
+    for p_id, p_info in list(active_polls.items()):
+        if p_info.get('db_quiz_id') == db_quiz_id:
+            active_polls.pop(p_id, None)
             try:
-                # 1. إغلاق المسابقة في سوبابيس
-                supabase.table("active_quizzes").update({
-                    "is_active": False, 
-                    "question_finished": True
-                }).eq("chat_id", cid).execute()
-                
-                # 2. كسر المحرك المحلي
-                if cid in active_quizzes:
-                    active_quizzes[cid]['active'] = False
-                
-                # 3. إغلاق الاستطلاعات (إن وجدت)
-                last_poll = active_quizzes.get(cid, {}).get('last_poll_id')
-                if last_poll:
-                    try: await bot.stop_poll(cid, last_poll)
-                    except: pass
+                await bot.delete_message(p_info['chat_id'], p_info['msg_id'])
+            except: pass
 
-                # 4. التصفير النهائي للرام
-                active_quizzes.pop(cid, None)
-                if cid in overall_scores: overall_scores.pop(cid, None)
-                active_broadcasts.discard(cid)
+    # إغلاق السجل في سوبابيس
+    if db_quiz_id:
+        try:
+            supabase.table("active_quizzes").update({"is_active": False, "is_paused": True}).eq("id", db_quiz_id).execute()
+        except: pass
 
-                role_tag = "👑 [قرار سيادي]" if is_admin_dev else "🛡️ [إيقاف إداري]"
-                await m.answer(f"{role_tag} <b>رفعت الأقلام!</b>\nتم إنهاء المحرك وتطهير سجلات الرام وقاعدة البيانات كلياً. 🧹", parse_mode="HTML")
-                logging.info(f"🛑 إيقاف شامل للمسابقة في {cid} بواسطة {u_name}")
-            except Exception as e:
-                logging.error(f"Stop Error: {e}")   
+    await message.reply("🛑 **تم إيقاف المسابقة وتصفير الذاكرة بنجاح!**\nالساحة الآن مهيأة.", parse_mode="Markdown")
+
+@dp.message_handler(Text(equals=["انسحاب", "خروج"], ignore_case=True), state="*")
+async def cmd_withdraw_quiz(message: types.Message, state: FSMContext):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    
+    if message.chat.type == "private":
+        return # الانسحاب للمجموعات فقط
+
+    quiz_info = active_quizzes.get(chat_id)
+    if not quiz_info:
+        await message.reply("🤔 لا توجد مسابقة نشطة حالياً للانسحاب منها.")
+        return
+
+    is_global = quiz_info.get('quiz_type') == 'public' or quiz_info.get('is_global') == True
+    if not is_global:
+        await message.reply("⚠️ هذا الأمر مخصص للانسحاب من (المسابقات العامة) فقط.")
+        return
+
+    organizer_id = quiz_info.get('quiz_owner_id')
+    db_quiz_id = quiz_info.get('quiz_id')
+    user_answers = await get_user_answers_count(user_id)
+
+    has_permission = False
+    
+    # [ نظام الصلاحيات للانسحاب ]
+    if user_id == ADMIN_ID:
+        has_permission = True
+    elif user_id == organizer_id:
+        await message.reply("⛔ أنت منظم هذه المسابقة! لإنهائها للجميع استخدم 'زدني قف'.")
+        return
+    else:
+        member = await message.chat.get_member(user_id)
+        is_admin_or_owner = member.status in ['creator', 'administrator']
+        if is_admin_or_owner or user_answers >= 150:
+            has_permission = True
+
+    if not has_permission:
+        await message.reply(f"⛔ عذراً، الانسحاب يتطلب أن تكون مشرفاً، أو تمتلك 150 إجابة.\n(إجاباتك الحالية: {user_answers})")
+        return
+
+    # [ الانسحاب الصامت للمجموعة ] 🥷
+    active_quizzes.pop(chat_id, None)
+
+    for p_id, p_info in list(active_polls.items()):
+        if p_info.get('chat_id') == chat_id:
+            active_polls.pop(p_id, None)
+            try:
+                await bot.delete_message(chat_id, p_info['msg_id'])
+            except: pass
+
+    # سحب المايك من المجموعة في سوبابيس (تحديث participants_ids)
+    if db_quiz_id:
+        try:
+            res = supabase.table("active_quizzes").select("participants_ids").eq("id", db_quiz_id).execute()
+            if res.data:
+                current_participants = res.data[0].get('participants_ids', [])
+                if chat_id in current_participants:
+                    current_participants.remove(chat_id)
+                    supabase.table("active_quizzes").update({"participants_ids": current_participants}).eq("id", db_quiz_id).execute()
+        except Exception as e:
+            logging.error(f"❌ فشل سحب المجموعة من سوبابيس: {e}")
+
+    await message.reply("🚶‍♂️ **تم الانسحاب من المسابقة العامة بنجاح!**\nلن تصلكم الأسئلة القادمة لهذه المسابقة.", parse_mode="Markdown")
 # ==========================================
 # 2️⃣ المعالج الرئيسي للأوامر (عني، رتبتي، إلخ)
 # ==========================================
