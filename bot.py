@@ -4883,6 +4883,10 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
     # 1. [ المندوب سلم القائمة ]
     input_ids = chat_ids if isinstance(chat_ids, list) else [chat_ids]
     all_chats = list(set(input_ids))
+
+    current_quiz_db_id = None
+    cat_name = "عام" 
+    owner_name_str = quiz_data.get('owner_name') or "مجهول"
     
     # --- [ أ ] تعريف الخرائط الناقصة لضمان عدم حدوث Error ---
     # 🔥 [ إضافة قاموس الأسماء هنا ] 🔥
