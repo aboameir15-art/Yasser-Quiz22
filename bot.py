@@ -5039,7 +5039,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 sample_cid = active_cids_list[0]
                 while active_quizzes.get(sample_cid, {}).get('is_paused', False):
                     await asyncio.sleep(2)
-                    if not active_quizzes.get(sample_cid, {}).get('active', False):
+                    #if not active_quizzes.get(sample_cid, {}).get('active', False):
                         logging.info("🛑 تم الإيقاف النهائي أثناء البريك.")
                         return
                         
