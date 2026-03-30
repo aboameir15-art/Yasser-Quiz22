@@ -5007,25 +5007,28 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         except Exception as e:
             logging.error(f"❌ خطأ سوبابيس في مرحلة التسجيل: {e}")
             return
-
+        # --- [ د ] دورة البث الموحدة ---
         # --- [ د ] دورة البث الموحدة ---
         for i, q in enumerate(selected_questions):
             
-            # 🛑 [ القسم 3: زراعة البريك (محرك الانتظار) ] 🛑
-            # نأخذ أي مجموعة نشطة كمؤشر لفحص حالة البريك في الرام
+            # 🛑 [ فحص النبض اللحظي ] 🛑
+            # نتحقق هل ما زالت إحدى المجموعات تعتبر المسابقة "نشطة" في الرام؟
+            is_still_running = any(active_quizzes.get(c, {}).get('active', False) for c in chats_to_broadcast)
+            
+            if not is_still_running:
+                logging.info("🚨 تم رصد إشارة إغلاق نهائي من الرام.. إيقاف المحرك فوراً.")
+                break # يكسر حلقة الأسئلة ويذهب للـ finally للتنظيف
+            
+            # (هنا يكمل كود البريك اللي وضعناه سابقاً)
             active_cids_list = list(chats_to_broadcast)
             if active_cids_list:
                 sample_cid = active_cids_list[0]
-                
-                # حلقة الانتظار: طالما is_paused = True، المحرك ينام ثانيتين ولا يرسل السؤال
                 while active_quizzes.get(sample_cid, {}).get('is_paused', False):
-                    await asyncio.sleep(2) # 💤 نوم خفيف لعدم تجميد البوت
-                    
-                    # 🛡️ فحص الأمان: إذا قرر المشرف إيقاف المسابقة كلياً (قف) أثناء البريك
-                    if sample_cid not in active_quizzes or not active_quizzes.get(sample_cid, {}).get('active', False):
-                        logging.info("🛑 تم الإيقاف النهائي أثناء البريك.. الخروج من المحرك.")
-                        return # كسر المحرك بالكامل والخروج من البث
-            
+                    await asyncio.sleep(2)
+                    # فحص الإغلاق أيضاً داخل البريك
+                    if not active_quizzes.get(sample_cid, {}).get('active', False):
+                        return
+                        
             # استكمال تهيئة السؤال بعد انتهاء البريك (أو إذا لم يكن هناك بريك)
             answered_users_global[i + 1] = [] 
 
