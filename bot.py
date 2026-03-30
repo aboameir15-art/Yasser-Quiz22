@@ -5012,26 +5012,30 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             logging.error(f"❌ خطأ سوبابيس في مرحلة التسجيل: {e}")
             return
         # --- [ د ] دورة البث الموحدة ---
-        # شحن الرام بالبيانات قبل دخول حلقة الأسئلة لمنع القفز للنتائج النهائية
+        # 🟢 [ الخطوة الذهبية ] 🟢
+        # شحن الرام بالحياة لكل المجموعات قبل دخول حلقة الأسئلة
         for cid in chats_to_broadcast:
-            active_quizzes[cid] = {
-                "active": True, 
+            if cid not in active_quizzes:
+                active_quizzes[cid] = {}
+            
+            active_quizzes[cid].update({
+                "active": True,
                 "is_paused": False,
                 "winners": [],
                 "losers": [],
                 "current_index": 0
-            }
+            })
 
-        # --- [ د ] دورة البث الموحدة ---
+        # الآن ندخل الحلقة بقلب قوي 💪
         for i, q in enumerate(selected_questions):
             
-            # 🛑 [ فحص النبض اللحظي ] 🛑
-            # الآن المحرك سيجد "active": True ولن يهرب للنتائج النهائية
+            # 🛑 [ فحص النبض الذكي ] 🛑
+            # الآن لن يهرب المحرك لأننا شحناه بالأعلى
             is_still_running = any(active_quizzes.get(c, {}).get('active', False) for c in chats_to_broadcast)
             
-            #if not is_still_running:
-                #logging.info(f"🚨 تم رصد إشارة إغلاق عند السؤال {i+1}.. الخروج الآمن.")
-                #break 
+            if not is_still_running:
+                logging.info(f"🚨 تم رصد إشارة إغلاق عند السؤال {i+1}.. إيقاف المحرك.")
+                break
 
             # (منطق البريك والانتظار)
             active_cids_list = list(chats_to_broadcast)
