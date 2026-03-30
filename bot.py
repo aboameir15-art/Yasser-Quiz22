@@ -5029,9 +5029,9 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             # الآن المحرك سيجد "active": True ولن يهرب للنتائج النهائية
             is_still_running = any(active_quizzes.get(c, {}).get('active', False) for c in chats_to_broadcast)
             
-            if not is_still_running:
-                logging.info(f"🚨 تم رصد إشارة إغلاق عند السؤال {i+1}.. الخروج الآمن.")
-                break 
+            #if not is_still_running:
+                #logging.info(f"🚨 تم رصد إشارة إغلاق عند السؤال {i+1}.. الخروج الآمن.")
+                #break 
 
             # (منطق البريك والانتظار)
             active_cids_list = list(chats_to_broadcast)
@@ -5039,7 +5039,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 sample_cid = active_cids_list[0]
                 while active_quizzes.get(sample_cid, {}).get('is_paused', False):
                     await asyncio.sleep(2)
-                    #if not active_quizzes.get(sample_cid, {}).get('active', False):
+                    if not active_quizzes.get(sample_cid, {}).get('active', False):
                         logging.info("🛑 تم الإيقاف النهائي أثناء البريك.")
                         return
                         
