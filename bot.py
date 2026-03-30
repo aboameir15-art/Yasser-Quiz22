@@ -5012,41 +5012,46 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             logging.error(f"❌ خطأ سوبابيس في مرحلة التسجيل: {e}")
             return
         # --- [ د ] دورة البث الموحدة ---
+        # 🟢 [ خطوة استباقية ] تنشيط الرام قبل بدء الحلقة لمنع التوقف المفاجئ
+        for cid in chats_to_broadcast:
+            if cid not in active_quizzes:
+                active_quizzes[cid] = {"active": True, "is_paused": False}
+            else:
+                active_quizzes[cid]['active'] = True
+
         # --- [ د ] دورة البث الموحدة ---
         for i, q in enumerate(selected_questions):
             
             # 🛑 [ فحص النبض اللحظي ] 🛑
-            # نتحقق هل ما زالت إحدى المجموعات تعتبر المسابقة "نشطة" في الرام؟
+            # الآن الفحص سيعمل بشكل صحيح لأننا نشطنا الرام بالأعلى
             is_still_running = any(active_quizzes.get(c, {}).get('active', False) for c in chats_to_broadcast)
             
             if not is_still_running:
-                logging.info("🚨 تم رصد إشارة إغلاق نهائي من الرام.. إيقاف المحرك فوراً.")
-                break # يكسر حلقة الأسئلة ويذهب للـ finally للتنظيف
-            
-            # (هنا يكمل كود البريك اللي وضعناه سابقاً)
+                logging.info(f"🚨 تم رصد إشارة إغلاق نهائي عند السؤال {i+1}.. إيقاف المحرك.")
+                break 
+
+            # (منطق البريك والانتظار)
             active_cids_list = list(chats_to_broadcast)
             if active_cids_list:
                 sample_cid = active_cids_list[0]
                 while active_quizzes.get(sample_cid, {}).get('is_paused', False):
                     await asyncio.sleep(2)
-                    # فحص الإغلاق أيضاً داخل البريك
                     if not active_quizzes.get(sample_cid, {}).get('active', False):
+                        logging.info("🛑 تم الإيقاف النهائي أثناء البريك.")
                         return
                         
-            # استكمال تهيئة السؤال بعد انتهاء البريك (أو إذا لم يكن هناك بريك)
+            # استخراج بيانات السؤال
             answered_users_global[i + 1] = [] 
-
             ans = str(q.get('correct_answer') or q.get('answer_text') or "").strip()
             
-            # 🔥 [ إصلاح اسم القسم لكل سؤال ] 🔥
+            # 🔥 [ جلب اسم القسم ] 🔥
             if is_bot:
                 cat_name = q.get('category') or "بوت"
             else:
                 cat_name = q['categories']['name'] if (q.get('categories') and isinstance(q['categories'], dict)) else "عام"
             
-            # 🔵 [ الخطوة 3 ] تحديث المشرف (active_quizzes) - المزامنة اللحظية
-            if current_quiz_db_id:                
-            
+            # 🔵 [ الخطوة 3 ] تحديث سوبابيس (المزامنة اللحظية)
+            if current_quiz_db_id:
                 try:
                     supabase.table("active_quizzes").update({
                         "current_answer": ans,
@@ -5059,15 +5064,14 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         "user_choices": {}
                     }).eq("id", current_quiz_db_id).execute()
                 except Exception as up_err:
-                    logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {i+1}: {up_err}")
+                    logging.error(f"⚠️ فشل تحديث السجل المركزي: {up_err}")
 
             # 🧠 تحديث الرادار المحلي (الرام) لكل مجموعة
             for cid in chats_to_broadcast:
-                # 💡 نحتفظ بحالة البريك الحالية حتى لا تتصفر مع تحديث الرام لكل سؤال
                 current_pause_state = active_quizzes.get(cid, {}).get('is_paused', False)
                 
                 active_quizzes[cid] = {
-                    "active": True,
+                    "active": True, # القيمة التي يفحصها "مستشعر النبض" في الدورة القادمة
                     "ans": ans,
                     "winners": [],
                     "voted_users": [], 
@@ -5078,11 +5082,10 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     "category": cat_name, 
                     "participants_ids": chats_to_broadcast,
                     "hint_sent": False,
-                    # 🔥 [ تغذية الرام بالبيانات الجديدة للحفاظ على الصلاحيات ] 🔥
                     "quiz_type": "public",
                     "quiz_owner_id": creator_id,
                     "quiz_owner_name": owner_name_str,
-                    "is_paused": current_pause_state 
+                    "is_paused": current_pause_state  
                 }
 
             # --- [ تجهيز التلميح ] ---
