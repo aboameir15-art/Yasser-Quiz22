@@ -2453,7 +2453,7 @@ async def cmd_withdraw_group(message: types.Message):
     
     quiz_info = active_quizzes.get(chat_id)
     if not quiz_info:
-        return # صمت لعدم الإزعاج إذا لم يكن هناك نشاط
+        return 
 
     # 🛂 [ استخراج هويات القوى ]
     organizer_id = quiz_info.get('quiz_owner_id')
@@ -2464,56 +2464,51 @@ async def cmd_withdraw_group(message: types.Message):
     if user_id == organizer_id and user_id != ADMIN_ID:
         return await message.reply(
             "⚠️ **عذراً أيها المنظم!**\n"
-            "لقد أطلقت شرارة التحدي، ولا يليق بالقائد أن يغادر الميدان أولاً. "
-            "أكمل المسابقة أو استخدم أمر (زدني قف) للإيقاف الكلي إذا كنت تملك الصلاحية."
+            "لا يليق بالقائد أن يغادر الميدان أولاً. أكمل المسابقة أو استخدم (زدني قف)."
         )
 
-    # 2️⃣ [ فحص الصلاحيات للأعضاء والمشرفين ]
+    # 2️⃣ [ فحص الصلاحيات ]
     member = await message.chat.get_member(user_id)
     is_admin = member.status in ['creator', 'administrator']
-    user_answers = await get_user_answers_count(user_id) # جلب رتبة "المسكين"
+    user_answers = await get_user_answers_count(user_id) 
     
-    has_right = False
-    
-    if user_id == ADMIN_ID:
-        has_right = True # المطور دائماً معه المفتاح
-    elif is_admin:
-        has_right = True # مالك المجموعة والمشرف لهم حق إخراج مجموعتهم
-    elif user_answers >= 150:
-        has_right = True # العضو المجتهد له كلمة مسموعة
+    has_right = (user_id == ADMIN_ID) or is_admin or (user_answers >= 150)
         
     if not has_right:
-        return await message.reply(
-            f"🚫 **نأسف يا صديقي..**\n"
-            f"الانسحاب قرار سيادي. يجب أن تكون (مشرفاً) أو تمتلك (150 إجابة) على الأقل.\n"
-            f"📊 رصيدك الحالي: `{user_answers}` إجابة."
-        )
+        return await message.reply(f"🚫 الانسحاب قرار سيادي (مشرف أو 150 إجابة). رصيدك: `{user_answers}`")
 
-    # 🧹 [ تنفيذ الكود العكسي - سحب الفيش ]
+    # 🧹 [ تنفيذ الكود العكسي - سحب الفيش وتطهير الجداول ]
     try:
-        # 1. إزالة المجموعة من الرام المحلي (المكبح اللحظي)
+        # 1. القتل الفوري في الرام (المكبح اللحظي)
         active_quizzes.pop(chat_id, None)
+        # تحرير المجموعة من قائمة البث النشطة لضمان قدرتها على دخول مسابقة أخرى فوراً
+        if chat_id in active_broadcasts:
+            active_broadcasts.remove(chat_id)
 
-        # 2. التطهير من سوبابيس (للمسابقات العامة)
-        if db_quiz_id and is_public:
-            res = supabase.table("active_quizzes").select("participants_ids").eq("id", db_quiz_id).execute()
-            if res.data:
-                current_list = res.data[0].get('participants_ids', [])
-                if chat_id in current_list:
-                    current_list.remove(chat_id)
-                    supabase.table("active_quizzes").update({"participants_ids": current_list}).eq("id", db_quiz_id).execute()
+        # 2. التطهير العميق من سوبابيس (الجدول والمسابقة)
+        if db_quiz_id:
+            # 🔥 [ الضربة القاضية ]: الحذف من جدول المشاركين (المحرك يقرأ من هنا في كل سؤال)
+            supabase.table("quiz_participants").delete().eq("quiz_id", db_quiz_id).eq("chat_id", chat_id).execute()
+
+            # (اختياري) تحديث السجل العام للمسابقة للمزامنة
+            if is_public:
+                res = supabase.table("active_quizzes").select("participants_ids").eq("id", db_quiz_id).execute()
+                if res.data:
+                    current_list = res.data[0].get('participants_ids', [])
+                    if chat_id in current_list:
+                        current_list.remove(chat_id)
+                        supabase.table("active_quizzes").update({"participants_ids": current_list}).eq("id", db_quiz_id).execute()
 
         # 3. رد البوت الذكي
         bye_msgs = [
             "🚶 **تم الانسحاب بسلام..**\nنغادر الميدان الآن، شكراً لاستضافتكم!",
-            "📉 **تم سحب المجموعة من الإذاعة..**\nنراكم في تحديات قادمة بإذن الله.",
             "✅ **قُضي الأمر..**\nتم فك ارتباط المجموعة بالمسابقة الحالية بنجاح."
         ]
         await message.reply(random.choice(bye_msgs))
 
     except Exception as e:
         logging.error(f"❌ Error in withdrawal: {e}")
-        await message.reply("⚠️ حدث خطأ تقني أثناء الانسحاب، ولكن تم عزل المجموعة من الذاكرة المحلية.")
+        await message.reply("⚠️ تم عزل المجموعة من الذاكرة المحلية، وجاري تنظيف السجلات السحابية.")
         
 # ==========================================
 # 2️⃣ المعالج الرئيسي للأوامر (عني، رتبتي، إلخ)
