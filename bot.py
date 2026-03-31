@@ -5250,20 +5250,34 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     results_to_delete[current_cid].append(rm.message_id)
             
             # 7️⃣ العداد التنازلي للسؤال القادم (تجهيز الرام)
+            # 7️⃣ العداد التنازلي المطور (نظام الفلترة اللحظية)
             if i < total_q - 1:
-                for cid in all_chats:
-                    if cid in active_quizzes:
-                        # تصفير قائمة الفائزين والمخطئين للسؤال القادم
-                        active_quizzes[cid]['winners'] = []
-                        active_quizzes[cid]['losers'] = []
-                        # 🧹 تنظيف معرف الاستفتاء القديم من الرام قبل السؤال الجديد
-                        if 'last_poll_id' in active_quizzes[cid]:
-                            del active_quizzes[cid]['last_poll_id']
+                # 🛑 مكبح الطوارئ: هل المسابقة توقفت كلياً في سوبابيس؟
+                check_stop = supabase.table("active_quizzes").select("is_active").eq("id", current_quiz_db_id).execute()
+                if check_stop.data and not check_stop.data[0].get('is_active', True):
+                    logging.info("🛑 [العداد]: تم رصد إيقاف كلي.. إلغاء العدادات القادمة.")
+                    break # يكسر حلقة الأسئلة ويخرج فوراً
 
-                count_tasks = [run_countdown(cid) for cid in all_chats]
+                # 🚶 فلترة المجموعات: نشغل العداد فقط للي "ما انسحبوا"
+                active_now = [cid for cid in all_chats if cid in active_quizzes]
+                
+                if not active_now:
+                    logging.info("⚡ [العداد]: لا توجد مجموعات نشطة حالياً.. إنهاء.")
+                    break
+
+                for cid in active_now:
+                    # تصفير الرام للسؤال القادم للمجموعات الصامدة فقط
+                    active_quizzes[cid]['winners'] = []
+                    active_quizzes[cid]['losers'] = []
+                    if 'last_poll_id' in active_quizzes[cid]:
+                        del active_quizzes[cid]['last_poll_id']
+
+                # تشغيل العداد فقط للمجموعات النشطة
+                count_tasks = [run_countdown(cid) for cid in active_now]
                 await asyncio.gather(*count_tasks, return_exceptions=True)
             else:
-                await asyncio.sleep(2)       
+                # نهاية المسابقة
+                await asyncio.sleep(2)
 
         # 🏁 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
         
