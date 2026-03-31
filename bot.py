@@ -5184,22 +5184,20 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     await asyncio.gather(*close_tasks, return_exceptions=True)                                       
 
             # 6️⃣ إغلاق السؤال وتحديث النقاط
-            
             global_winners = []
             global_losers = []  
             
-            # 🔥 [ تحديث قائمة الصامدين فوراً من سوبابيس قبل معالجة النتائج ] 🔥
+            # 🔥 [ 1. إعادة إنعاش القائمة - اللحظة الحاسمة ] 🔥
+            # نحدث قائمة المجموعات "الآن" من سوبابيس لضمان عدم نسيان أي مجموعة جاوبت
             try:
-                p_res = supabase.table("quiz_participants").select("chat_id").eq("quiz_id", current_quiz_db_id).execute()
-                # المجموعات اللي "موجودة حالياً" في الجدول فقط
-                current_active_ids = [p['chat_id'] for p in p_res.data]
+                p_refresh = supabase.table("quiz_participants").select("chat_id").eq("quiz_id", current_quiz_db_id).execute()
+                current_active_ids = [p['chat_id'] for p in p_refresh.data]
             except:
                 current_active_ids = [cid for cid in all_chats if cid in active_quizzes]
 
-            # 💡 تجميع الفائزين والمخطئين (فقط من المجموعات التي لم تنسحب)
+            # تجميع الفائزين والمخطئين (المعالجة)
             for cid in current_active_ids:
                 if cid in active_quizzes:
-                    # تجميع الفائزين
                     for winner in active_quizzes[cid].get('winners', []):
                         winner['home_cid'] = cid  
                         w_id = winner.get('id')
@@ -5207,7 +5205,6 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         winner['user_link'] = f'<a href="tg://user?id={w_id}">{w_name}</a>'
                         global_winners.append(winner)
                     
-                    # تجميع المخطئين
                     for loser in active_quizzes[cid].get('losers', []):
                         loser['home_cid'] = cid  
                         l_id = loser.get('id')
@@ -5215,48 +5212,38 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         loser['user_link'] = f'<a href="tg://user?id={l_id}">{l_name}</a>'
                         global_losers.append(loser)
 
-            # 🏆 ترتيب ملوك العالم حسب السرعة
             global_winners = sorted(global_winners, key=lambda x: x.get('time', 0))
-                        
-            # 2️⃣ تحديث السجلات (فقط للمجموعات الموجودة في الجدول)
+            
+            # 2️⃣ تحديث السجلات وتأمين الرام
             for cid in current_active_ids:
-                if cid in active_quizzes:
-                    # 🔥 [ إضافة التطهير ] 🔥
-                    active_quizzes[cid]['active'] = False
-                    active_quizzes[cid]['question_finished'] = True # نؤكد الإغلاق البرمجي هنا أيضاً
+                # 🛡️ تأمين: لو المجموعة في سوبابيس بس مش في الرام، رجعها للرام فوراً
+                if cid not in active_quizzes:
+                    active_quizzes[cid] = {"active": False, "question_finished": True, "winners": [], "losers": []}
+                
+                active_quizzes[cid]['active'] = False
+                active_quizzes[cid]['question_finished'] = True 
+                
+                local_winners = active_quizzes[cid].get('winners', [])
+                group_points_claimed = False 
+                gname = group_names_map.get(str(cid)) or group_names_map.get(cid) or "مجموعة نشطة"
+
+                for w in local_winners:
+                    uid, uname = w['id'], w['name']
+                    pts_earned = w.get('pts', 10)
+                    if uid not in group_scores[cid]:
+                        group_scores[cid][uid] = {"name": uname, "mention": w.get('user_link'), "points": 0}
                     
-                    local_winners = active_quizzes[cid].get('winners', [])
-                    group_points_claimed = False 
-
-                    # جلب اسم المجموعة (حل مشكلة الأسماء المجهولة)
-                    # تأكدنا من استخدام str(cid) لضمان المطابقة
-                    gname = group_names_map.get(str(cid)) or group_names_map.get(cid) or "مجموعة نشطة"
-
-                    for w in local_winners:
-                        uid, uname = w['id'], w['name']
-                        pts_earned = w.get('pts', 10)
-                        
-                        if uid not in group_scores[cid]:
-                            group_scores[cid][uid] = {"name": uname, "mention": w.get('user_link'), "points": 0}
-                        
-                        group_scores[cid][uid]['points'] += pts_earned
-                        
-                        if not group_points_claimed:
-                            final_group_pts = pts_earned + 5
-                            # إضافة للنقاط المحلية (الرام)
-                            if 'group_total_points' in locals():
-                                group_total_points[cid] += final_group_pts
+                    group_scores[cid][uid]['points'] += pts_earned
+                    if not group_points_claimed:
+                        final_group_pts = pts_earned + 5
+                        if 'group_total_points' in locals(): group_total_points[cid] += final_group_pts
+                        await update_group_stats(cid, gname, uid, uname, final_group_pts)
+                        group_points_claimed = True 
+                    else:
+                        await update_group_stats(cid, gname, uid, uname, 0)
                             
-                            # تحديث سوبابيس (إرسال الاسم الحقيقي للمجموعة واللاعب)
-                            await update_group_stats(cid, gname, uid, uname, final_group_pts)
-                            group_points_claimed = True 
-                        else:
-                            # لاعب إضافي أجاب صح (نحدث نقاطه الشخصية فقط)
-                            await update_group_stats(cid, gname, uid, uname, 0)
-                                        
-            # 3️⃣ إرسال القالب الملكي الفخم (للمجموعات الموجودة في سوبابيس فقط)
+            # 3️⃣ [ بث القالب الملكي - تزامن شامل ] 🔥
             res_tasks = []
-            # هنا السر: نستخدم current_active_ids بدل all_chats
             for cid in current_active_ids:
                 res_tasks.append(send_creative_results(
                     chat_id=cid, 
@@ -5269,32 +5256,34 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     group_names=group_names_map
                 ))
             
-            res_msgs = await asyncio.gather(*res_tasks, return_exceptions=True)
+            # إرسال متوازي لضمان السرعة لكل المجموعات في نفس اللحظة
+            await asyncio.gather(*res_tasks, return_exceptions=True)
             
-            # 7️⃣ العداد التنازلي المطور (نظام الفلترة اللحظية)
+            # 7️⃣ العداد التنازلي المطور
             if i < total_q - 1:
-                # 🛑 مكبح الطوارئ الكلي
-                if current_quiz_db_id:
+                # مكبح الطوارئ من سوبابيس
+                try:
                     check_stop = supabase.table("active_quizzes").select("is_active").eq("id", current_quiz_db_id).execute()
-                    if check_stop.data and not check_stop.data[0].get('is_active', True):
-                        break 
+                    if check_stop.data and not check_stop.data[0].get('is_active', True): break
+                except: pass
 
-                # تشغيل العداد فقط لمن بقي في الجدول والرام معاً
+                # الفلترة النهائية للعداد (من بقي في سوبابيس)
                 final_active_for_timer = [cid for cid in current_active_ids if cid in active_quizzes]
-                
-                if not final_active_for_timer:
-                    break
+                if not final_active_for_timer: break
 
                 for cid in final_active_for_timer:
+                    # 🧼 [ تطهير القفل للجولة القادمة ] - أهم سطر
                     active_quizzes[cid]['winners'] = []
                     active_quizzes[cid]['losers'] = []
+                    active_quizzes[cid]['question_finished'] = False # فتح القفل
+                    active_quizzes[cid]['active'] = True # تفعيل الاستقبال
 
-                # تشغيل العداد بصورة متوازية للمجموعات الصامدة فقط
+                # إطلاق العدادات الموحدة
                 count_tasks = [run_countdown(cid) for cid in final_active_for_timer]
                 await asyncio.gather(*count_tasks, return_exceptions=True)                                                    
             else:
-                # نهاية المسابقة
                 await asyncio.sleep(0.8)
+
 
         # 🏁 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
         
