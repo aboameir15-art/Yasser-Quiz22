@@ -5144,58 +5144,69 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                             active_quizzes[cid]['last_poll_id'] = m.message_id  
 
             # 5️⃣ [ محرك الانتظار الموحد ]
-            # 5️⃣ [ محرك الانتظار للنصوص المباشرة - وضع السرعة ] ⚡
+            # 5️⃣ [ محرك الانتظار الموحد - نسخة الرادار النفاث ⚡ ]
             t_limit = int(quiz_data.get('time_limit', 15))
             start_wait = time.time()
             
-            # حلقة مراقبة "نبض الرام"
+            # حلقة مراقبة "نبض الذاكرة المفتوحة"
             while time.time() - start_wait < t_limit:
                 
-                # 🛑 1. فحص الإيقاف الكلي (سوبابيس)
-                if int(time.time() - start_wait) % 2 == 0:
-                    try:
-                        check = supabase.table("active_quizzes").select("is_active").eq("id", current_quiz_db_id).execute()
-                        if check.data and not check.data[0].get('is_active', True):
-                            break
-                    except: pass
+                # 🛑 1. فحص الإيقاف الكلي (من الذاكرة المفتوحة - RAM)
+                # بدلاً من سؤال سوبابيس كل ثانيتين، نسأل الذاكرة: هل القاموس فرغ؟
+                global current_quiz_participants
+                if not current_quiz_participants:
+                    logging.info("🛑 [رادار]: تم تصفير الذاكرة المفتوحة.. إيقاف الانتظار فوراً.")
+                    break
 
-                # 🛑 2. فحص المجموعات النشطة في الرام
-                active_chats = [c for c in chats_to_broadcast if c in active_quizzes]
-                if not active_chats: break
+                # 🛑 2. فحص المجموعات النشطة (التي لم تنسحب)
+                # نحدث قائمة active_chats بناءً على الموجودين في الذاكرة المفتوحة "الآن"
+                active_chats = [cid for cid in chats_to_broadcast if str(cid) in current_quiz_participants and cid in active_quizzes]
+                
+                if not active_chats: 
+                    break
                 
                 # 🔥 [ 3. المكبح النصي اللحظي ] 🔥
-                # في وضع السرعة، بمجرد أن يكتب أي لاعب الإجابة الصحيحة في أي مجموعة
-                # يقوم رادار الرصد بتغيير 'question_finished' إلى True
+                # فحص هل قام أي بطل في أي مجموعة بكتابة الإجابة الصحيحة؟
                 is_answered = any(active_quizzes.get(c, {}).get('question_finished') for c in active_chats)
                 
                 if is_answered:
-                    logging.info("⚡ [سرعة نصية]: بطل حسمها بالكتابة! كسر حلقة الانتظار.")
-                    break # 👈 الهروب فوراً من الـ 15 ثانية وعرض النتائج
+                    logging.info("⚡ [سرعة]: تم حسم السؤال! كسر حلقة الانتظار.")
+                    break 
                 
-                # حساسية فائقة (0.1 ثانية) لالتقاط الكلمة فور وصولها للرام
-                await asyncio.sleep(0.08)
+                # فحص إذا قام "الآدمن" بإيقاف المسابقة من سوبابيس (مرة كل 3 ثوانٍ لتقليل الضغط)
+                if int(time.time() - start_wait) % 3 == 0:
+                    try:
+                        # هذا الفحص اختياري كـ "أمان إضافي" بجانب الذاكرة
+                        check = supabase.table("active_quizzes").select("is_active").eq("id", current_quiz_db_id).execute()
+                        if check.data and not check.data[0].get('is_active', True):
+                            current_quiz_participants.clear() # تصفير الذاكرة لضمان وقوف الكل
+                            break
+                    except: pass
 
-            # ✅ تأكيد إغلاق السؤال عند الجميع برمجياً
-            for cid in active_chats:
+                # حساسية فائقة (0.1 ثانية) لالتقاط الإجابة فور وصولها للرام
+                await asyncio.sleep(0.1)
+
+            # ✅ [ الخطوة النهائية ]: تأمين إغلاق بوابات السؤال
+            # نغلق الاستقبال فقط للمجموعات التي لا تزال "حية" في الذاكرة المفتوحة
+            final_active = [cid for cid in chats_to_broadcast if str(cid) in current_quiz_participants]
+            
+            for cid in final_active:
                 if cid in active_quizzes:
                     active_quizzes[cid]['question_finished'] = True
-                    active_quizzes[cid]['active'] = False # إيقاف استقبال إجابات إضافية
-  
+                    active_quizzes[cid]['active'] = False 
+
             # 🛑 [ الحركة القاضية - إغلاق الاستطلاعات ]
-            # نغلق فقط في المجموعات التي لا تزال "موجودة" في الرام ولم تنسحب
             if current_style == 'اختيارات 📊':
                 close_tasks = []
-                for cid in chats_to_broadcast:
-                    # لا نغلق البول إلا إذا كانت المجموعة لا تزال في الرام (لم تنسحب)
+                for cid in final_active:
                     p_id = active_quizzes.get(cid, {}).get('last_poll_id')
                     if p_id:
-                        try:
-                            close_tasks.append(bot.stop_poll(cid, p_id))
-                        except: pass
+                        # إغلاق متوازي لضمان عدم تأخر أي مجموعة
+                        close_tasks.append(bot.stop_poll(cid, p_id))
                 
                 if close_tasks:
-                    # تنفيذ الإغلاق الجماعي بسرعة البرق
-                    await asyncio.gather(*close_tasks, return_exceptions=True)                                       
+                    await asyncio.gather(*close_tasks, return_exceptions=True)
+    
 
             # 6️⃣ إغلاق السؤال وتحديث النقاط
             global_winners = []
