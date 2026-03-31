@@ -5289,7 +5289,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 await asyncio.gather(*count_tasks, return_exceptions=True)                                                    
             else:
                 # نهاية المسابقة
-                await asyncio.sleep(2)
+                await asyncio.sleep(0.8)
 
         # 🏁 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
         
