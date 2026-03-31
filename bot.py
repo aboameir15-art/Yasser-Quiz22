@@ -5037,27 +5037,24 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             logging.error(f"❌ خطأ سوبابيس في مرحلة التسجيل: {e}")
             return
         # --- [ داخل دورة البث الموحدة ] ---
-        # --- [ داخل دورة البث الموحدة ] ---
+        # --- [ داخل دورة البث الموحدة - نسخة الإعصار ⚡ ] ---
         for i, q in enumerate(selected_questions):
             
-            # 🔥 [ 1. رادار سوبابيس اللحظي - المرجع الوحيد للحقيقة ] 🔥
-            # سحب القائمة "الآن" من جدول المشاركين لضمان توقف المنسحبين يدوياً
-            try:
-                p_res = supabase.table("quiz_participants").select("chat_id").eq("quiz_id", current_quiz_db_id).execute()
-                # قائمة المجموعات اللي لسه "مخزنة" في الجدول حالياً
-                db_active_ids = [p['chat_id'] for p in p_res.data]
-                
-                # تحديث القائمة المحلية فوراً: أي مجموعة حذفتها من الجدول ستطير من هنا
-                chats_to_broadcast = [cid for cid in chats_to_broadcast if cid in db_active_ids]
-            except Exception as e:
-                logging.error(f"⚠️ فشل الرادار في تحديث القائمة من سوبابيس: {e}")
+            # 🔥 [ 1. رادار الذاكرة المفتوحة - الاستجابة اللحظية ] 🔥
+            # لم نعد نسأل سوبابيس هنا! نسأل القاموس العالمي current_quiz_participants
+            # أي مجموعة انسحبت أو أوقفت المسابقة ستطير من القاموس فوراً
+            global current_quiz_participants
+            
+            # تحديث قائمة البث بناءً على "الأحياء" فقط في الذاكرة المفتوحة
+            chats_to_broadcast = [int(cid) for cid in current_quiz_participants.keys() if current_quiz_participants[cid]['status'] == 'playing']
 
-            # 🛑 [ مكبح الطوارئ ]
-            # إذا أفرغت الجدول يدوياً أو انسحب الجميع، يغلق المحرك فوراً
+            # 🛑 [ مكبح الطوارئ الذكي ]
+            # إذا أفرغت الذاكرة (بأمر إيقاف كلي) أو انسحب الجميع، ينتهي المحرك في جزء من الثانية
             if not chats_to_broadcast:
-                logging.info("🛑 [رادار]: جدول المشاركين فارغ في سوبابيس.. إنهاء المحرك.")
+                logging.info("🛑 [رادار الذاكرة]: لا توجد مجموعات نشطة في الذاكرة المفتوحة.. إنهاء المحرك.")
                 if current_quiz_db_id:
-                    supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_db_id).execute()
+                    # تحديث سوبابيس مرة واحدة في النهاية للإغلاق للأرشفة
+                    asyncio.create_task(supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_db_id).execute())
                 break 
 
             # 2️⃣ [ تجهيز البيانات اللحظية للسؤال ]
@@ -5083,12 +5080,11 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0},
                 "voter_list": [],
                 "user_choices": {},
-                "participants_ids": chats_to_broadcast # تحديث القائمة الصافية في سوبابيس
+                "participants_ids": chats_to_broadcast 
             }
 
-            # 3️⃣ [ تحديث الرام للمجموعات الصامدة فقط ]
+            # 3️⃣ [ تحديث الرام للمجموعات الصامدة فقط - سرعة البرق ]
             for cid in chats_to_broadcast:
-                # نحدث الرام المحلي لضمان أن المايسترو وقالب الإجابة يقرؤون أحدث البيانات
                 active_quizzes[cid] = sync_data.copy()
                 active_quizzes[cid].update({
                     "active": True,
@@ -5102,13 +5098,11 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     "quiz_type": "public"
                 })
 
-            # 4️⃣ [ مزامنة السحاب النهائية للسؤال الحالي ]
+            # 4️⃣ [ مزامنة السحاب في الخلفية - لا لتعطيل البث ]
             if current_quiz_db_id:
-                try:
-                    supabase.table("active_quizzes").update(sync_data).eq("id", current_quiz_db_id).execute()
-                except Exception as up_err:
-                    logging.error(f"⚠️ فشل تحديث سجل سوبابيس: {up_err}")
-        
+                # استخدمنا create_task لكي نحدث سوبابيس "في الظل" بينما البوت يرسل السؤال فعلياً
+                asyncio.create_task(supabase.table("active_quizzes").update(sync_data).eq("id", current_quiz_db_id).execute())
+
             # --- [ تجهيز التلميح الذكي ] ---
             normal_hint_str = ""
             is_hint_on = quiz_data.get('smart_hint', False)
