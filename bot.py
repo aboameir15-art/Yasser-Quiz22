@@ -79,6 +79,9 @@ answered_users_global = {}
 quiz_tasks = {}
 overall_scores = {}
 
+# مخزن المجموعات المشاركة في المسابقة العامة (مفتوح للوصول من أي مكان)
+current_quiz_participants = {}
+
 async def send_log(error_type, error_details, chat_id=None, user_id=None):
         """
         إرسال تقرير خطأ مفصل إلى الوجهة المشفرة (LOG_GROUP_ID)
@@ -4986,17 +4989,19 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         messages_to_delete = {cid: [] for cid in all_chats}
         results_to_delete = {cid: [] for cid in all_chats}
 
-        # 🟢 [ الخطوة 1: المشرف ] إنشاء سجل المسابقة المركزي الموحد
+        # 🟢 [ الخطوة 1: المشرف ] إنشاء سجل المسابقة المركزي الموحد وتجهيز الذاكرة المفتوحة
         current_quiz_db_id = None
         try:
             creator_id = quiz_data.get('owner_id') or quiz_data.get('created_by') or 0
+            
+            # 1. إنشاء السجل في سوبابيس (المرجع الصلب)
             quiz_entry = supabase.table("active_quizzes").insert({
                 "quiz_name": f"إذاعة {owner_name}",
                 "created_by": creator_id,
                 "is_global": True,
                 "is_active": True,
-                "is_paused": False, # الرادار يبدأ أخضر 🟢
-                "participants_ids": chats_to_broadcast, # نحفظ الآيديات الصافية للمزامنة
+                "is_paused": False, 
+                "participants_ids": chats_to_broadcast,
                 "total_questions": total_q,
                 "quiz_type": "public",
                 "category_name": main_cat_name,
@@ -5007,12 +5012,27 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
             if quiz_entry.data:
                 current_quiz_db_id = quiz_entry.data[0]['id']
-                logging.info(f"✅ سجل active_quizzes جاهز ID: {current_quiz_db_id}")
+                logging.info(f"✅ سجل المسابقة جاهز ID: {current_quiz_db_id}")
 
-                # تسجيل المشاركين في الجدول الفرعي (للأرشفة)
+                # 🔥 [ 2. تفعيل الذاكرة المفتوحة - RAM ] 🔥
+                # نجعل المجموعات قابلة للوصول إليها من أي مكان في البوت فوراً
+                global current_quiz_participants
+                current_quiz_participants = {} 
+
+                for cid in chats_to_broadcast:
+                    # نجهز لكل مجموعة "ملف نشاط" داخل الذاكرة
+                    current_quiz_participants[str(cid)] = {
+                        "quiz_id": current_quiz_db_id,
+                        "start_time": time.time(),
+                        "is_paused": False,
+                        "status": "playing" # playing, withdrawn, or stopped
+                    }
+
+                # 3. أرشفة المشاركين في سوبابيس (للحفظ الدائم)
                 participants_records = [{"quiz_id": current_quiz_db_id, "chat_id": cid} for cid in chats_to_broadcast]
                 supabase.table("quiz_participants").insert(participants_records).execute()
-
+                
+                logging.info(f"⚡ الذاكرة المفتوحة جاهزة لـ {len(current_quiz_participants)} مجموعة.")
         except Exception as e:
             logging.error(f"❌ خطأ سوبابيس في مرحلة التسجيل: {e}")
             return
