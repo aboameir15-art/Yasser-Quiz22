@@ -5022,23 +5022,11 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             logging.error(f"❌ خطأ سوبابيس في مرحلة التسجيل: {e}")
             return
 
-        # --- [ د ] دورة البث الموحدة ---
         # --- [ داخل دورة البث الموحدة ] ---
         for i, q in enumerate(selected_questions):
             
-            # 🔥 [ الكود العكسي القاتل لـ أثر ] 🔥
-            # تحديث كشف المجموعات قبل الإرسال (الفلترة اللحظية)
-            chats_to_broadcast = [cid for cid in chats_to_broadcast if cid in active_quizzes]
-
-            if not chats_to_broadcast:
-                logging.info("🛑 [رادار]: الساحة خالية تماماً.. إغلاق محرك الإذاعة.")
-                # تحديث سوبابيس بإغلاق المسابقة نهائياً
-                if current_quiz_db_id:
-                    supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_db_id).execute()
-                break # كسر الحلقة وإنهاء الدالة
-
+            # 1️⃣ [ تجهيز البيانات اللحظية للسؤال ]
             answered_users_global[i + 1] = [] 
-
             ans = str(q.get('correct_answer') or q.get('answer_text') or "").strip()
             
             if is_bot:
@@ -5046,11 +5034,10 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             else:
                 cat_name = q['categories']['name'] if (q.get('categories') and isinstance(q['categories'], dict)) else "عام"
             
-            # 💡 [ القاموس الموحد: sync_data ] 💡
-            # هذا هو المرجع الذي تفهمه أوامر "زدني قف" و "انسحاب"
+            # 💡 [ القاموس الموحد: المرجع الأساسي ]
             sync_data = {
                 "is_active": True,
-                "is_paused": False, # يمكن تحديثه من الرام لو وجد
+                "is_paused": False,
                 "current_answer": ans,
                 "current_index": i + 1,
                 "total_questions": total_q,
@@ -5059,33 +5046,50 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 "question_finished": False,
                 "hint_sent": False,
                 "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0},
-                "voter_list": [], # في الإذاعة يفضل أن تكون قائمة للفائزين عالمياً
+                "voter_list": [],
                 "user_choices": {}
             }
 
-            # 🔵 [ الخطوة 3 ] تحديث المشرف (active_quizzes) - المزامنة اللحظية مع السحاب
-            if current_quiz_db_id:
-                try:
-                    supabase.table("active_quizzes").update(sync_data).eq("id", current_quiz_db_id).execute()
-                except Exception as up_err:
-                    logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {i+1}: {up_err}")
-
-            # 🔥 تحديث الرادار المحلي (الرام) لكل مجموعة مشاركة
+            # 2️⃣ [ الخطوة الجوهرية: تحديث الرام أولاً لضمان عدم القفز ]
+            # نقوم بتحديث الرام لكل مجموعة "قبل" الفحص العكسي لضمان وجودهم في الذاكرة
             for cid in chats_to_broadcast:
-                # نأخذ نسخة من بيانات المزامنة ونضيف عليها خصوصيات كل مجموعة
-                active_quizzes[cid] = sync_data.copy()
+                if cid not in active_quizzes: # إذا كانت المجموعة مفقودة (ليست منسحبة عمداً)
+                    active_quizzes[cid] = sync_data.copy()
+                
                 active_quizzes[cid].update({
-                    "active": True, # للتوافق القديم
-                    "ans": ans,    # للتوافق القديم
+                    "active": True,
+                    "ans": ans,
                     "winners": [],
                     "voted_users": [], 
                     "mode": quiz_data.get('mode', 'السرعة ⚡'),
-                    "quiz_id": current_quiz_db_id, # توحيد المسمى مع الخاص
+                    "quiz_id": current_quiz_db_id,
                     "category": cat_name,
                     "participants_ids": chats_to_broadcast,
                     "raw_q_data": q,
                     "quiz_type": "public"
                 })
+
+            # 🔥 [ 3️⃣ الكود العكسي القاتل لـ أثر - رادار الانسحاب ] 🔥
+            # الآن، وبعد أن ضمنا وجود المجموعات في الرام، نفحص من "حذف نفسه" يدوياً (عبر أمر انسحاب)
+            chats_to_broadcast = [cid for cid in chats_to_broadcast if cid in active_quizzes]
+
+            # إذا انسحب الجميع فعلياً، نغلق المحرك بسلام
+            if not chats_to_broadcast:
+                logging.info("🛑 [رادار]: الساحة خالية (جميع المجموعات انسحبت).. إنهاء المحرك.")
+                if current_quiz_db_id:
+                    try: supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_db_id).execute()
+                    except: pass
+                break 
+
+            # 4️⃣ [ مزامنة السحاب النهائية ]
+            # تحديث سوبابيس بالقائمة "الصافية" للمجموعات التي لم تنسحب
+            if current_quiz_db_id:
+                try:
+                    update_payload = sync_data.copy()
+                    update_payload["participants_ids"] = chats_to_broadcast
+                    supabase.table("active_quizzes").update(update_payload).eq("id", current_quiz_db_id).execute()
+                except Exception as up_err:
+                    logging.error(f"⚠️ فشل تحديث سوبابيس: {up_err}")
 
 
             # --- [ تجهيز التلميح ] ---
