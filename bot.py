@@ -5021,14 +5021,41 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         except Exception as e:
             logging.error(f"❌ خطأ سوبابيس في مرحلة التسجيل: {e}")
             return
-
+        # --- [ داخل دورة البث الموحدة ] ---
         # --- [ داخل دورة البث الموحدة ] ---
         for i, q in enumerate(selected_questions):
             
+            # 🔥 [ 1. الفحص من سوبابيس (قلب الخطة) ] 🔥
+            # نجلب المجموعات التي لا تزال موجودة في الجدول حالياً
+            try:
+                participants_res = supabase.table("quiz_participants").select("chat_id").eq("quiz_id", current_quiz_db_id).execute()
+                # تحويل النتائج إلى قائمة آيديات صافية
+                current_db_participants = [p['chat_id'] for p in participants_res.data]
+                
+                # تحديث قائمة البث المحلية لتطابق الجدول تماماً
+                chats_to_broadcast = [cid for cid in chats_to_broadcast if cid in current_db_participants]
+            except Exception as e:
+                logging.error(f"⚠️ فشل تحديث قائمة المشاركين من الجدول: {e}")
+
+            # 🔥 [ 2. مزامنة الرام مع الجدول ] 🔥
+            # أي مجموعة خرجت من الجدول، نحذفها فوراً من الرام لمنع إرسال الأجوبة لها
+            active_chats_in_ram = list(active_quizzes.keys())
+            for ram_cid in active_chats_in_ram:
+                if ram_cid not in chats_to_broadcast:
+                    active_quizzes.pop(ram_cid, None)
+
+            # 🛑 [ 3. فحص النهاية ]
+            if not chats_to_broadcast:
+                logging.info("🛑 [رادار]: جدول المشاركين فارغ.. إنهاء المحرك فوراً.")
+                if current_quiz_db_id:
+                    try: supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_db_id).execute()
+                    except: pass
+                break 
+
             # 1️⃣ [ تجهيز البيانات اللحظية للسؤال ]
             answered_users_global[i + 1] = [] 
             ans = str(q.get('correct_answer') or q.get('answer_text') or "").strip()
-            
+
             if is_bot:
                 cat_name = q.get('category') or "بوت"
             else:
