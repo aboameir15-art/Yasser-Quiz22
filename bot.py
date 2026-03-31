@@ -2370,60 +2370,81 @@ async def cmd_stop_quiz(message: types.Message, state: FSMContext):
         return
 
     is_global = quiz_info.get('quiz_type') == 'public' or quiz_info.get('is_global') == True
-    organizer_id = quiz_info.get('quiz_owner_id')
     db_quiz_id = quiz_info.get('quiz_id')
+    
+    # 🔍 [ إصلاح الخلل: جلب الهوية الحقيقية للمنظم ]
+    # نحاول أولاً من الرام، إذا لم نجدها نسحبها من سوبابيس فوراً
+    organizer_id = quiz_info.get('quiz_owner_id')
+    
+    if not organizer_id and db_quiz_id:
+        try:
+            res = supabase.table("active_quizzes").select("quiz_owner_id").eq("id", db_quiz_id).execute()
+            if res.data:
+                organizer_id = res.data[0].get('quiz_owner_id')
+        except: pass
 
-    # جلب عدد إجابات اللاعب من جدوله الشخصي
+    # جلب عدد إجابات اللاعب من جدوله الشخصي للتحقق من الرتبة
     user_answers = await get_user_answers_count(user_id)
     
     has_permission = False
     
-    # [ نظام الصلاحيات ]
-    if user_id == ADMIN_ID: # المطور (فيتو مطلق)
+    # 🛂 [ نظام الصلاحيات المحدث ]
+    if user_id == ADMIN_ID: # أنت المطور (صلاحية مطلقة)
+        has_permission = True
+    elif organizer_id and user_id == organizer_id: # المنظم (صاحب المسابقة)
         has_permission = True
     else:
+        # إذا لم يكن المطور أو المنظم، نطبق شروط الرتبة والإشراف
         if not is_global:
-            # مسابقة خاصة
+            # --- المسابقة الخاصة ---
             if message.chat.type == "private":
-                if user_id == organizer_id: 
-                    has_permission = True
+                # في الخاص المنظم فقط (وتحققنا منه فوق)
+                pass 
             else:
+                # في المجموعات: مشرف المجموعة أو رتبة 150+
                 member = await message.chat.get_member(user_id)
                 is_admin = member.status in ['creator', 'administrator']
-                if user_id == organizer_id or is_admin or user_answers >= 150:
+                if is_admin or user_answers >= 150:
                     has_permission = True
         else:
-            # مسابقة عامة (المنظم أو لاعب خارق 500+)
-            if user_id == organizer_id or user_answers >= 500:
+            # --- المسابقة العامة ---
+            # في العامة: رتبة 500+ (بما أن المنظم تم التحقق منه فوق)
+            if user_answers >= 500:
                 has_permission = True
 
     if not has_permission:
-        await message.reply(f"⛔ لا تملك الصلاحية لإيقاف المسابقة.\n(إجاباتك: {user_answers} | المطلوب للعامة: 500, للخاصة: 150 أو إشراف)")
+        await message.reply(f"⛔ لا تملك الصلاحية لإيقاف المسابقة.\n(إجاباتك: {user_answers} | المطلوب للعامة: 500 أو أن تكون المنظم)")
         return
 
-    # [ التنظيف الجراحي والتصفير ] 🧹
-    if is_global:
-        participating_chats = quiz_info.get('participants_ids', [])
-        for cid in participating_chats:
-            active_quizzes.pop(cid, None)
-    else:
+    # 🧹 [ التنفيذ والتصفير الشامل ]
+    try:
+        # 1. إيقاف السجل في سوبابيس (المكبح الرئيسي)
+        if db_quiz_id:
+            supabase.table("active_quizzes").update({"is_active": False, "is_paused": True}).eq("id", db_quiz_id).execute()
+
+        # 2. تنظيف الرام (محلياً وعالمياً)
+        if is_global:
+            # نجلب كل المجموعات المشاركة من الرام أو السجل ونمسحها
+            participants = quiz_info.get('participants_ids', [])
+            for cid in participants:
+                active_quizzes.pop(cid, None)
+        
+        # مسح المجموعة الحالية في كل الأحوال للتأكيد
         active_quizzes.pop(chat_id, None)
 
-    # تنظيف الاستفتاءات المعلقة في الرام وحذفها من الشات
-    for p_id, p_info in list(active_polls.items()):
-        if p_info.get('db_quiz_id') == db_quiz_id:
-            active_polls.pop(p_id, None)
-            try:
-                await bot.delete_message(p_info['chat_id'], p_info['msg_id'])
-            except: pass
+        # 3. حذف الاستفتاءات (Polls) المعلقة
+        for p_id, p_info in list(active_polls.items()):
+            if p_info.get('db_quiz_id') == db_quiz_id:
+                active_polls.pop(p_id, None)
+                try:
+                    await bot.delete_message(p_info['chat_id'], p_info['msg_id'])
+                except: pass
 
-    # إغلاق السجل في سوبابيس
-    if db_quiz_id:
-        try:
-            supabase.table("active_quizzes").update({"is_active": False, "is_paused": True}).eq("id", db_quiz_id).execute()
-        except: pass
+        await message.reply("🛑 **تم إيقاف المسابقة  بنجاح!**\nتم الاستجابة لطلب الإيقاف فوراً.", parse_mode="Markdown")
 
-    await message.reply("🛑 **تم إيقاف المسابقة وتصفير الذاكرة بنجاح!**\nالساحة الآن مهيأة.", parse_mode="Markdown")
+    except Exception as e:
+        logging.error(f"❌ خطأ أثناء إيقاف المسابقة: {e}")
+        await message.reply("⚠️ حدث خطأ أثناء محاولة إغلاق المسابقة، ولكن تم تصفير الذاكرة المحلية.")
 
 @dp.message_handler(Text(equals=["انسحاب", "خروج"], ignore_case=True), state="*")
 async def cmd_withdraw_quiz(message: types.Message, state: FSMContext):
