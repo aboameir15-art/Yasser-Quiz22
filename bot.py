@@ -4949,7 +4949,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         selected_questions = pool[:count] 
         total_q = len(selected_questions)
 
-        # 2️⃣ استخراج اسم القسم الرئيسي (للسجل المركزي) بنفس منطق المحرك الخاص
+        # 2️⃣ استخراج اسم القسم الرئيسي (للسجل المركزي)
         sample_q = selected_questions[0]
         if is_bot:
             main_cat_name = sample_q.get('category') or "بوت"
@@ -4960,7 +4960,8 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         messages_to_delete = {cid: [] for cid in all_chats}
         results_to_delete = {cid: [] for cid in all_chats}
 
-        # 🟢 [ الخطوة 1: المشرف ] إنشاء سجل المسابقة المركزي
+        # 🟢 [ الخطوة 1: المشرف ] إنشاء سجل المسابقة المركزي الموحد
+        current_quiz_db_id = None
         try:
             creator_id = quiz_data.get('owner_id') or quiz_data.get('created_by') or 0
             quiz_entry = supabase.table("active_quizzes").insert({
@@ -4968,17 +4969,21 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 "created_by": creator_id,
                 "is_global": True,
                 "is_active": True,
-                "participants_ids": [group_names_map.get(str(c), str(c)) for c in chats_to_broadcast],
+                "is_paused": False, # الرادار يبدأ أخضر 🟢
+                "participants_ids": chats_to_broadcast, # نحفظ الآيديات الصافية للمزامنة
                 "total_questions": total_q,
                 "quiz_type": "public",
-                "category_name": main_cat_name, # 👈 تم الإصلاح هنا
-                "quiz_style": current_style
+                "category_name": main_cat_name,
+                "quiz_style": current_style,
+                "quiz_owner_id": creator_id,
+                "quiz_owner_name": owner_name
             }).execute()
 
             if quiz_entry.data:
                 current_quiz_db_id = quiz_entry.data[0]['id']
                 logging.info(f"✅ سجل active_quizzes جاهز ID: {current_quiz_db_id}")
 
+                # تسجيل المشاركين في الجدول الفرعي (للأرشفة)
                 participants_records = [{"quiz_id": current_quiz_db_id, "chat_id": cid} for cid in chats_to_broadcast]
                 supabase.table("quiz_participants").insert(participants_records).execute()
 
@@ -4992,42 +4997,51 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
             ans = str(q.get('correct_answer') or q.get('answer_text') or "").strip()
             
-            # 🔥 [ إصلاح اسم القسم لكل سؤال ] 🔥
             if is_bot:
                 cat_name = q.get('category') or "بوت"
             else:
                 cat_name = q['categories']['name'] if (q.get('categories') and isinstance(q['categories'], dict)) else "عام"
             
-            # 🔵 [ الخطوة 3 ] تحديث المشرف (active_quizzes) - المزامنة اللحظية
+            # 💡 [ القاموس الموحد: sync_data ] 💡
+            # هذا هو المرجع الذي تفهمه أوامر "زدني قف" و "انسحاب"
+            sync_data = {
+                "is_active": True,
+                "is_paused": False, # يمكن تحديثه من الرام لو وجد
+                "current_answer": ans,
+                "current_index": i + 1,
+                "total_questions": total_q,
+                "question_category_name": cat_name,
+                "quiz_style": current_style,
+                "question_finished": False,
+                "hint_sent": False,
+                "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0},
+                "voter_list": [], # في الإذاعة يفضل أن تكون قائمة للفائزين عالمياً
+                "user_choices": {}
+            }
+
+            # 🔵 [ الخطوة 3 ] تحديث المشرف (active_quizzes) - المزامنة اللحظية مع السحاب
             if current_quiz_db_id:
                 try:
-                    supabase.table("active_quizzes").update({
-                        "current_answer": ans,
-                        "current_index": i + 1,
-                        "question_category_name": cat_name, # 👈 يظهر الآن (تاريخ، جغرافيا..)
-                        "is_active": True,
-                        "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0}, # تصفير التصويت
-                        "voter_list": {}, # تصفير القائمة
-                        "user_choices": {}
-                    }).eq("id", current_quiz_db_id).execute()
+                    supabase.table("active_quizzes").update(sync_data).eq("id", current_quiz_db_id).execute()
                 except Exception as up_err:
                     logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {i+1}: {up_err}")
 
-            # تحديث الرادار المحلي (الرام) لكل مجموعة
+            # 🔥 تحديث الرادار المحلي (الرام) لكل مجموعة مشاركة
             for cid in chats_to_broadcast:
-                active_quizzes[cid] = {
-                    "active": True,
-                    "ans": ans,
+                # نأخذ نسخة من بيانات المزامنة ونضيف عليها خصوصيات كل مجموعة
+                active_quizzes[cid] = sync_data.copy()
+                active_quizzes[cid].update({
+                    "active": True, # للتوافق القديم
+                    "ans": ans,    # للتوافق القديم
                     "winners": [],
                     "voted_users": [], 
-                    "quiz_style": current_style,
                     "mode": quiz_data.get('mode', 'السرعة ⚡'),
-                    "db_quiz_id": current_quiz_db_id, 
-                    "current_index": i + 1,
-                    "category": cat_name, # 👈 يمرر للمايسترو بشكل صحيح
+                    "quiz_id": current_quiz_db_id, # توحيد المسمى مع الخاص
+                    "category": cat_name,
                     "participants_ids": chats_to_broadcast,
-                    "hint_sent": False
-                }
+                    "raw_q_data": q,
+                    "quiz_type": "public"
+                })
 
 
             # --- [ تجهيز التلميح ] ---
