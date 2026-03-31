@@ -4642,7 +4642,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             questions_to_delete.append(q_msg.message_id)
             active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id
 
-        # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري ]
+        # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري      
         # 4️⃣ [ مكبح مراقبة الوقت والانسحاب الفوري ]        
         start_time = time.time()
         t_limit = int(quiz_data.get('time_limit', 15))
@@ -4677,6 +4677,7 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                         }).eq("id", current_quiz_id).execute()
                 except Exception as e:
                     logging.warning(f"⚠️ الاستطلاع مغلق مسبقاً: {e}")
+                    
         # 5️⃣ إنهاء السؤال وعرض النتائج
         # 5️⃣ إنهاء السؤال وحساب النقاط (النسخة النظيفة 🔥)
         if chat_id in active_quizzes:
@@ -5088,32 +5089,53 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         active_quizzes[cid]['last_poll_id'] = m.message_id
 
             # 5️⃣ [ محرك الانتظار الموحد ]
+            # 5️⃣ [ محرك الانتظار الموحد المطور بمكابح أثر ]
             t_limit = int(quiz_data.get('time_limit', 15))
             start_wait = time.time()
             
-            # حلقة مراقبة ذكية (تنتظر حتى انتهاء الوقت أو إجابة الجميع)
+            # حلقة مراقبة ذكية (تنتظر حتى انتهاء الوقت أو رصد أمر إيقاف)
             while time.time() - start_wait < t_limit:
-                # التحقق هل لا يزال هناك أي مجموعة نشطة؟
-                still_active = any(active_quizzes.get(c, {}).get('active', False) for c in chats_to_broadcast)
-                if not still_active:
-                    logging.info("⚡ الرادار أعطى إشارة إغلاق.. الانتقال للنتائج فوراً.")
+                # 🛑 [ المكبح الأول: فحص الإيقاف الكلي من سوبابيس ]
+                # نتحقق كل ثانية تقريباً لتخفيف الضغط على الشبكة
+                if int(time.time() - start_wait) % 2 == 0:
+                    check = supabase.table("active_quizzes").select("is_active").eq("id", current_quiz_db_id).execute()
+                    if check.data and not check.data[0].get('is_active', True):
+                        logging.info("🛑 [رادار]: تم رصد أمر إيقاف كلي.. إنهاء حلقة الانتظار فوراً.")
+                        break
+
+                # 🛑 [ المكبح الثاني: فحص انسحاب المجموعات ]
+                # إذا مسح "انسحاب" مجموعة من الرام، هذا السطر يضمن عدم انتظارها
+                active_chats = [c for c in chats_to_broadcast if c in active_quizzes]
+                
+                # إذا لم يتبقَ أي مجموعة (الكل انسحب أو تم الإيقاف)
+                if not active_chats:
+                    logging.info("⚡ [رادار]: لا توجد مجموعات نشطة.. إغلاق المحرك.")
                     break
                 
-                # تقليل النوم لـ 0.05 لضمان حساسية عالية جداً
+                # 🛑 [ المكبح الثالث: هل السؤال انتهى برمجياً؟ ]
+                still_active = any(active_quizzes.get(c, {}).get('active', False) for c in active_chats)
+                if not still_active:
+                    logging.info("⚡ [رادار]: الجميع أجابوا أو انتهى السؤال.. الانتقال للنتائج.")
+                    break
+                
+                # حساسية عالية جداً لرصد التغييرات (0.1 ثانية)
                 await asyncio.sleep(0.1)
 
             # 🛑 [ الحركة القاضية - إغلاق الاستطلاعات ]
-            # إذا كان النمط "اختيارات"، نغلق الـ Poll في كل المجموعات فوراً عند انتهاء الوقت
+            # نغلق فقط في المجموعات التي لا تزال "موجودة" في الرام ولم تنسحب
             if current_style == 'اختيارات 📊':
                 close_tasks = []
                 for cid in chats_to_broadcast:
+                    # لا نغلق البول إلا إذا كانت المجموعة لا تزال في الرام (لم تنسحب)
                     p_id = active_quizzes.get(cid, {}).get('last_poll_id')
                     if p_id:
-                        # إيقاف الاستطلاع يمنع أي تصويت إضافي ويظهر النتيجة النهائية
-                        close_tasks.append(bot.stop_poll(cid, p_id))
+                        try:
+                            close_tasks.append(bot.stop_poll(cid, p_id))
+                        except: pass
                 
                 if close_tasks:
-                    await asyncio.gather(*close_tasks, return_exceptions=True)                   
+                    # تنفيذ الإغلاق الجماعي بسرعة البرق
+                    await asyncio.gather(*close_tasks, return_exceptions=True)                                       
 
             # 6️⃣ إغلاق السؤال وتحديث النقاط
             # 🏁 [ محرك القوة العالمية - التشطيب الملكي الصافي ]
