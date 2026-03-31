@@ -5217,15 +5217,19 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
             # 🏆 ترتيب ملوك العالم حسب السرعة
             global_winners = sorted(global_winners, key=lambda x: x.get('time', 0))
-            
+                        
             # 2️⃣ تحديث السجلات (فقط للمجموعات الموجودة في الجدول)
             for cid in current_active_ids:
                 if cid in active_quizzes:
+                    # 🔥 [ إضافة التطهير ] 🔥
                     active_quizzes[cid]['active'] = False
+                    active_quizzes[cid]['question_finished'] = True # نؤكد الإغلاق البرمجي هنا أيضاً
+                    
                     local_winners = active_quizzes[cid].get('winners', [])
                     group_points_claimed = False 
 
-                    # جلب اسم المجموعة من الخريطة المجهزة مسبقاً (لحل مشكلة الأسماء المجهولة)
+                    # جلب اسم المجموعة (حل مشكلة الأسماء المجهولة)
+                    # تأكدنا من استخدام str(cid) لضمان المطابقة
                     gname = group_names_map.get(str(cid)) or group_names_map.get(cid) or "مجموعة نشطة"
 
                     for w in local_winners:
@@ -5247,8 +5251,9 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                             await update_group_stats(cid, gname, uid, uname, final_group_pts)
                             group_points_claimed = True 
                         else:
+                            # لاعب إضافي أجاب صح (نحدث نقاطه الشخصية فقط)
                             await update_group_stats(cid, gname, uid, uname, 0)
-
+                                        
             # 3️⃣ إرسال القالب الملكي الفخم (للمجموعات الموجودة في سوبابيس فقط)
             res_tasks = []
             # هنا السر: نستخدم current_active_ids بدل all_chats
