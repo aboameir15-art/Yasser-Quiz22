@@ -6293,35 +6293,60 @@ async def process_auth_callback(c: types.CallbackQuery):
     await c.message.delete()
     await admin_manage_groups(c)
 # ==========================================
-# 5. نهاية الملف: ضمان التشغيل 24/7 (Keep-Alive)
+# 5. نهاية الملف: نظام الإنعاش الأبدي 24/7 (النبض الذاتي) ⚡
 # ==========================================
 from aiohttp import web
+import os
 
-# دالة الرد على "نغزة" المواقع الخارجية مثل Cron-job
+# 1. دالة الرد على النبض (الوجه الذي يراه خادم ريندر)
 async def handle_ping(request):
-    return web.Response(text="Bot is Active and Running! 🚀")
+    return web.Response(text="Bot is Awake, Boss Yasser! 🚀")
 
-if __name__ == '__main__':
-    # 1. إعداد سيرفر ويب صغير في الخلفية للرد على طلبات الـ HTTP
+# 2. 🪄 الخدعة السحرية: النبض الذاتي (البوت يوقظ نفسه)
+async def self_resuscitation():
+    # سيسحب البوت رابط السيرفر الخاص به
+    render_url = os.getenv("RENDER_EXTERNAL_URL") 
+    
+    if not render_url:
+        logging.warning("⚠️ [إنذار]: لم تقم بإضافة RENDER_EXTERNAL_URL في متغيرات ريندر!")
+        return
+
+    while True:
+        try:
+            # يرسل البوت طلباً لنفسه كل 10 دقائق قبل أن ينام السيرفر
+            async with aiohttp.ClientSession() as session:
+                async with session.get(render_url) as response:
+                    logging.info(f"💉 [إنعاش ذاتي]: تم حقن السيرفر بنبضة حياة - الحالة: {response.status}")
+        except Exception as e:
+            logging.error(f"⚠️ [خطأ في النبض]: {e}")
+        
+        # 600 ثانية = 10 دقائق (ريندر ينام بعد 15 دقيقة، فنحن نسبقه!)
+        await asyncio.sleep(600)
+
+# 3. دالة التشغيل الشاملة (المايسترو)
+async def main_startup():
+    # أ) تشغيل سيرفر الويب الوهمي
     app = web.Application()
     app.router.add_get('/', handle_ping)
-    
-    loop = asyncio.get_event_loop()
     runner = web.AppRunner(app)
-    loop.run_until_complete(runner.setup())
+    await runner.setup()
     
-    # 2. تحديد المنفذ (Port): Render يستخدم غالباً 10000، و Koyeb يستخدم ما يحدده النظام
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
-    
-    # تشغيل السيرفر كـ "مهمة" جانبية حتى لا يعطل البوت
-    loop.create_task(site.start())
-    print(f"✅ Keep-alive server started on port {port}")
+    await site.start()
+    logging.info(f"🌐 سيرفر الإنعاش يعمل بشراسة على المنفذ {port}")
 
-    # 3. إعدادات السجلات والتشغيل النهائي للبوت
-    logging.basicConfig(level=logging.INFO)
-    
-    # بدء استقبال الرسائل (Polling) مع تخطي التحديثات القديمة
-    executor.start_polling(dp, skip_updates=True)
+    # ب) إطلاق رصاصة النبض الذاتي في الخلفية
+    asyncio.create_task(self_resuscitation())
 
-              
+    # ج) تشغيل محرك التليجرام الأساسي (aiogram)
+    logging.info("🚀 جاري إقلاع البوت...")
+    await dp.start_polling()
+
+if __name__ == '__main__':
+    # دمج جميع العمليات في مسار واحد (Event Loop) يمنع التضارب
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(main_startup())
+    except KeyboardInterrupt:
+        logging.info("🛑 تم إيقاف البوت يدوياً.")
