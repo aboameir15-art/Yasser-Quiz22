@@ -5025,43 +5025,36 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         # --- [ داخل دورة البث الموحدة ] ---
         for i, q in enumerate(selected_questions):
             
-            # 🔥 [ 1. الفحص من سوبابيس (قلب الخطة) ] 🔥
-            # نجلب المجموعات التي لا تزال موجودة في الجدول حالياً
+            # 🔥 [ 1. رادار سوبابيس اللحظي - المرجع الوحيد للحقيقة ] 🔥
+            # سحب القائمة "الآن" من جدول المشاركين لضمان توقف المنسحبين يدوياً
             try:
-                participants_res = supabase.table("quiz_participants").select("chat_id").eq("quiz_id", current_quiz_db_id).execute()
-                # تحويل النتائج إلى قائمة آيديات صافية
-                current_db_participants = [p['chat_id'] for p in participants_res.data]
+                p_res = supabase.table("quiz_participants").select("chat_id").eq("quiz_id", current_quiz_db_id).execute()
+                # قائمة المجموعات اللي لسه "مخزنة" في الجدول حالياً
+                db_active_ids = [p['chat_id'] for p in p_res.data]
                 
-                # تحديث قائمة البث المحلية لتطابق الجدول تماماً
-                chats_to_broadcast = [cid for cid in chats_to_broadcast if cid in current_db_participants]
+                # تحديث القائمة المحلية فوراً: أي مجموعة حذفتها من الجدول ستطير من هنا
+                chats_to_broadcast = [cid for cid in chats_to_broadcast if cid in db_active_ids]
             except Exception as e:
-                logging.error(f"⚠️ فشل تحديث قائمة المشاركين من الجدول: {e}")
+                logging.error(f"⚠️ فشل الرادار في تحديث القائمة من سوبابيس: {e}")
 
-            # 🔥 [ 2. مزامنة الرام مع الجدول ] 🔥
-            # أي مجموعة خرجت من الجدول، نحذفها فوراً من الرام لمنع إرسال الأجوبة لها
-            active_chats_in_ram = list(active_quizzes.keys())
-            for ram_cid in active_chats_in_ram:
-                if ram_cid not in chats_to_broadcast:
-                    active_quizzes.pop(ram_cid, None)
-
-            # 🛑 [ 3. فحص النهاية ]
+            # 🛑 [ مكبح الطوارئ ]
+            # إذا أفرغت الجدول يدوياً أو انسحب الجميع، يغلق المحرك فوراً
             if not chats_to_broadcast:
-                logging.info("🛑 [رادار]: جدول المشاركين فارغ.. إنهاء المحرك فوراً.")
+                logging.info("🛑 [رادار]: جدول المشاركين فارغ في سوبابيس.. إنهاء المحرك.")
                 if current_quiz_db_id:
-                    try: supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_db_id).execute()
-                    except: pass
+                    supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_db_id).execute()
                 break 
 
-            # 1️⃣ [ تجهيز البيانات اللحظية للسؤال ]
+            # 2️⃣ [ تجهيز البيانات اللحظية للسؤال ]
             answered_users_global[i + 1] = [] 
             ans = str(q.get('correct_answer') or q.get('answer_text') or "").strip()
-
+            
             if is_bot:
                 cat_name = q.get('category') or "بوت"
             else:
                 cat_name = q['categories']['name'] if (q.get('categories') and isinstance(q['categories'], dict)) else "عام"
             
-            # 💡 [ القاموس الموحد: المرجع الأساسي ]
+            # 💡 [ القاموس الموحد: المرجع الأساسي للمزامنة ]
             sync_data = {
                 "is_active": True,
                 "is_paused": False,
@@ -5074,15 +5067,14 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 "hint_sent": False,
                 "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0},
                 "voter_list": [],
-                "user_choices": {}
+                "user_choices": {},
+                "participants_ids": chats_to_broadcast # تحديث القائمة الصافية في سوبابيس
             }
 
-            # 2️⃣ [ الخطوة الجوهرية: تحديث الرام أولاً لضمان عدم القفز ]
-            # نقوم بتحديث الرام لكل مجموعة "قبل" الفحص العكسي لضمان وجودهم في الذاكرة
+            # 3️⃣ [ تحديث الرام للمجموعات الصامدة فقط ]
             for cid in chats_to_broadcast:
-                if cid not in active_quizzes: # إذا كانت المجموعة مفقودة (ليست منسحبة عمداً)
-                    active_quizzes[cid] = sync_data.copy()
-                
+                # نحدث الرام المحلي لضمان أن المايسترو وقالب الإجابة يقرؤون أحدث البيانات
+                active_quizzes[cid] = sync_data.copy()
                 active_quizzes[cid].update({
                     "active": True,
                     "ans": ans,
@@ -5091,46 +5083,27 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     "mode": quiz_data.get('mode', 'السرعة ⚡'),
                     "quiz_id": current_quiz_db_id,
                     "category": cat_name,
-                    "participants_ids": chats_to_broadcast,
                     "raw_q_data": q,
                     "quiz_type": "public"
                 })
 
-            # 🔥 [ 3️⃣ الكود العكسي القاتل لـ أثر - رادار الانسحاب ] 🔥
-            # الآن، وبعد أن ضمنا وجود المجموعات في الرام، نفحص من "حذف نفسه" يدوياً (عبر أمر انسحاب)
-            chats_to_broadcast = [cid for cid in chats_to_broadcast if cid in active_quizzes]
-
-            # إذا انسحب الجميع فعلياً، نغلق المحرك بسلام
-            if not chats_to_broadcast:
-                logging.info("🛑 [رادار]: الساحة خالية (جميع المجموعات انسحبت).. إنهاء المحرك.")
-                if current_quiz_db_id:
-                    try: supabase.table("active_quizzes").update({"is_active": False}).eq("id", current_quiz_db_id).execute()
-                    except: pass
-                break 
-
-            # 4️⃣ [ مزامنة السحاب النهائية ]
-            # تحديث سوبابيس بالقائمة "الصافية" للمجموعات التي لم تنسحب
+            # 4️⃣ [ مزامنة السحاب النهائية للسؤال الحالي ]
             if current_quiz_db_id:
                 try:
-                    update_payload = sync_data.copy()
-                    update_payload["participants_ids"] = chats_to_broadcast
-                    supabase.table("active_quizzes").update(update_payload).eq("id", current_quiz_db_id).execute()
+                    supabase.table("active_quizzes").update(sync_data).eq("id", current_quiz_db_id).execute()
                 except Exception as up_err:
-                    logging.error(f"⚠️ فشل تحديث سوبابيس: {up_err}")
-
-
-            # --- [ تجهيز التلميح ] ---
+                    logging.error(f"⚠️ فشل تحديث سجل سوبابيس: {up_err}")
+        
+            # --- [ تجهيز التلميح الذكي ] ---
             normal_hint_str = ""
             is_hint_on = quiz_data.get('smart_hint', False)
             if is_hint_on:
                 ans_str = str(ans).strip()
                 normal_hint_str = f"مكونة من ({len(ans_str.split())}) كلمات، تبدأ بـ ( {ans_str[0]} )"
                 
-            # 4️⃣ [ بث السؤال للعالم عبر المايسترو ]
+            # 5️⃣ [ بث السؤال للعالم عبر المايسترو ]
             send_tasks = []
             for cid in chats_to_broadcast:
-                # نستخدم المايسترو بدلاً من send_quiz_question
-                # المايسترو سيعرف تلقائياً هل يرسل Poll أو رسالة نصية بناءً على current_style
                 task = send_quiz_master(
                     chat_id=cid, 
                     q_data=q, 
@@ -5142,25 +5115,24 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         'time_limit': int(quiz_data.get('time_limit', 15)),
                         'cat_name': cat_name,
                         'quiz_db_id': current_quiz_db_id,
-                        'quiz_style': current_style, # 👈 المتغير الذي جلبناه في بداية المحرك
+                        'quiz_style': current_style,
                         'is_public': True
                     },
-                    all_questions_list=selected_questions # ضروري لتوليد الخيارات في الـ Poll
+                    all_questions_list=selected_questions
                 )
                 send_tasks.append(task)
 
             # تنفيذ البث الجماعي (إرسال متوازي لسرعة فائقة)
             q_msgs = await asyncio.gather(*send_tasks, return_exceptions=True)
 
-            # تسجيل معرفات الرسائل للتحكم بها لاحقاً (مسح أو إغلاق)
+            # تسجيل معرفات الرسائل للتحكم بها (مسح أو إغلاق Poll)
             for idx, m in enumerate(q_msgs):
-                cid = chats_to_broadcast[idx]
-                if isinstance(m, types.Message):
-                    messages_to_delete[cid].append(m.message_id)
-                    
-                    # 👈 إضافة مهمة: إذا كان السؤال Poll، نحفظ معرفه لإغلاقه برمجياً
-                    if hasattr(m, 'poll') and m.poll is not None:
-                        active_quizzes[cid]['last_poll_id'] = m.message_id
+                if idx < len(chats_to_broadcast):
+                    cid = chats_to_broadcast[idx]
+                    if isinstance(m, types.Message):
+                        messages_to_delete[cid].append(m.message_id)
+                        if hasattr(m, 'poll') and m.poll is not None:
+                            active_quizzes[cid]['last_poll_id'] = m.message_id  
 
             # 5️⃣ [ محرك الانتظار الموحد ]
             # 5️⃣ [ محرك الانتظار الموحد المطور بمكابح أثر ]
