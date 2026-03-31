@@ -5130,38 +5130,43 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                             active_quizzes[cid]['last_poll_id'] = m.message_id  
 
             # 5️⃣ [ محرك الانتظار الموحد ]
-            # 5️⃣ [ محرك الانتظار الموحد المطور بمكابح أثر ]
+            # 5️⃣ [ محرك الانتظار للنصوص المباشرة - وضع السرعة ] ⚡
             t_limit = int(quiz_data.get('time_limit', 15))
             start_wait = time.time()
             
-            # حلقة مراقبة ذكية (تنتظر حتى انتهاء الوقت أو رصد أمر إيقاف)
+            # حلقة مراقبة "نبض الرام"
             while time.time() - start_wait < t_limit:
-                # 🛑 [ المكبح الأول: فحص الإيقاف الكلي من سوبابيس ]
-                # نتحقق كل ثانية تقريباً لتخفيف الضغط على الشبكة
+                
+                # 🛑 1. فحص الإيقاف الكلي (سوبابيس)
                 if int(time.time() - start_wait) % 2 == 0:
-                    check = supabase.table("active_quizzes").select("is_active").eq("id", current_quiz_db_id).execute()
-                    if check.data and not check.data[0].get('is_active', True):
-                        logging.info("🛑 [رادار]: تم رصد أمر إيقاف كلي.. إنهاء حلقة الانتظار فوراً.")
-                        break
+                    try:
+                        check = supabase.table("active_quizzes").select("is_active").eq("id", current_quiz_db_id).execute()
+                        if check.data and not check.data[0].get('is_active', True):
+                            break
+                    except: pass
 
-                # 🛑 [ المكبح الثاني: فحص انسحاب المجموعات ]
-                # إذا مسح "انسحاب" مجموعة من الرام، هذا السطر يضمن عدم انتظارها
+                # 🛑 2. فحص المجموعات النشطة في الرام
                 active_chats = [c for c in chats_to_broadcast if c in active_quizzes]
+                if not active_chats: break
                 
-                # إذا لم يتبقَ أي مجموعة (الكل انسحب أو تم الإيقاف)
-                if not active_chats:
-                    logging.info("⚡ [رادار]: لا توجد مجموعات نشطة.. إغلاق المحرك.")
-                    break
+                # 🔥 [ 3. المكبح النصي اللحظي ] 🔥
+                # في وضع السرعة، بمجرد أن يكتب أي لاعب الإجابة الصحيحة في أي مجموعة
+                # يقوم رادار الرصد بتغيير 'question_finished' إلى True
+                is_answered = any(active_quizzes.get(c, {}).get('question_finished') for c in active_chats)
                 
-                # 🛑 [ المكبح الثالث: هل السؤال انتهى برمجياً؟ ]
-                still_active = any(active_quizzes.get(c, {}).get('active', False) for c in active_chats)
-                if not still_active:
-                    logging.info("⚡ [رادار]: الجميع أجابوا أو انتهى السؤال.. الانتقال للنتائج.")
-                    break
+                if is_answered:
+                    logging.info("⚡ [سرعة نصية]: بطل حسمها بالكتابة! كسر حلقة الانتظار.")
+                    break # 👈 الهروب فوراً من الـ 15 ثانية وعرض النتائج
                 
-                # حساسية عالية جداً لرصد التغييرات (0.1 ثانية)
-                await asyncio.sleep(0.1)
+                # حساسية فائقة (0.1 ثانية) لالتقاط الكلمة فور وصولها للرام
+                await asyncio.sleep(0.08)
 
+            # ✅ تأكيد إغلاق السؤال عند الجميع برمجياً
+            for cid in active_chats:
+                if cid in active_quizzes:
+                    active_quizzes[cid]['question_finished'] = True
+                    active_quizzes[cid]['active'] = False # إيقاف استقبال إجابات إضافية
+  
             # 🛑 [ الحركة القاضية - إغلاق الاستطلاعات ]
             # نغلق فقط في المجموعات التي لا تزال "موجودة" في الرام ولم تنسحب
             if current_style == 'اختيارات 📊':
