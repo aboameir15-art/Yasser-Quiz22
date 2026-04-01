@@ -4960,6 +4960,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
         # --- [ د ] دورة البث الموحدة ---
         for i, q in enumerate(selected_questions):
+            current_active_ids = [] # 🛡️ تأمين: المتغير الآن موجود وله قيمة (قائمة فارغة)
             answered_users_global[i + 1] = [] 
 
             ans = str(q.get('correct_answer') or q.get('answer_text') or "").strip()
