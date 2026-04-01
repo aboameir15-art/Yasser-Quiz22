@@ -5867,7 +5867,7 @@ async def self_resuscitation():
             logging.error(f"⚠️ [خطأ في النبض]: {e}")
         
         # 600 ثانية = 10 دقائق (ريندر ينام بعد 15 دقيقة، فنحن نسبقه!)
-        await asyncio.sleep(600)
+        await asyncio.sleep(300)
 
 # 3. دالة التشغيل الشاملة (المايسترو)
 async def main_startup():
