@@ -4630,40 +4630,59 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
     try:
         # 3. [ جلب وتجهيز الأسئلة - منطق الصانع الذكي ]
-        # استخراج الأقسام من بيانات المسابقة (التي أرسلها المندوب)
-        raw_cats = quiz_data.get('category_ids') or quiz_data.get('category_id')
+        # --- [ ج ] جلب وتجهيز الأسئلة من المخزن (The Vault) ---
+        # 1. استخراج الأقسام باستخدام المفتاح القديم 'cats' لضمان التوافق
+        raw_cats = quiz_data.get('cats') or quiz_data.get('category_ids') or []
         
-        # تحويل الأقسام لقائمة أرقام نظيفة
+        # تحويل الأقسام لقائمة أرقام نظيفة (دعم Json و String و List)
         if isinstance(raw_cats, str):
-            cat_ids = [int(c.strip()) for c in raw_cats.replace('[','').replace(']','').split(',') if c.strip().isdigit()]
-        elif isinstance(raw_cats, list):
-            cat_ids = [int(c) for c in raw_cats]
-        else:
-            cat_ids = []
+            try: 
+                cat_ids_list = json.loads(raw_cats)
+            except: 
+                cat_ids_list = raw_cats.replace('[','').replace(']','').replace('"','').split(',')
+        else: 
+            cat_ids_list = raw_cats
+            
+        # تنظيف وتحويل لكل عنصر ليكون Integer
+        cat_ids = [int(c) for c in cat_ids_list if str(c).strip().isdigit()]
+
+        if not cat_ids:
+            logging.error("❌ فشل المحرك: لم يتم العثور على أي معرفات أقسام (cat_ids is empty).")
+            return
 
         is_bot = quiz_data.get("is_bot_quiz", False)
         table = "bot_questions" if is_bot else "questions"
         cat_col = "bot_category_id" if is_bot else "category_id"
-        current_style = quiz_data.get('quiz_style', 'السرعة ⚡')
-        count = int(quiz_data.get('questions_count', 10))
-
-        # 🚀 جلب الأسئلة دفعة واحدة (Batch Select)
+        current_style = quiz_data.get('quiz_style', 'السرعة ⚡') 
+        
+        # 2. جلب الأسئلة من سوبابيس بالربط الصحيح
         res_q = supabase.table(table).select("*, categories(name)" if not is_bot else "*").in_(cat_col, cat_ids).execute()
         
         if not res_q.data:
-            logging.error(f"❌ مستودع الأسئلة فارغ لهذه الأقسام: {cat_ids}")
+            logging.error(f"⚠️ مستودع الأسئلة فارغ في قاعدة البيانات للأقسام: {cat_ids}")
             return
 
+        # 3. خلط واختيار الكمية المطلوبة
         pool = res_q.data
         random.shuffle(pool)
-        selected_questions = pool[:count]
+        count = int(quiz_data.get('questions_count', 10))
+        selected_questions = pool[:count] 
         total_q = len(selected_questions)
 
-        # تحديد اسم القسم الرئيسي بذكاء
+        # 4. تحديد اسم القسم الرئيسي (للسجل المركزي)
         sample_q = selected_questions[0]
-        main_cat_name = "بوت" if is_bot else (sample_q.get('categories', {}).get('name') if isinstance(sample_q.get('categories'), dict) else "عام")
+        if is_bot:
+            main_cat_name = sample_q.get('category') or "بوت"
+        else:
+            # معالجة الربط المتعدد لاسم القسم
+            main_cat_name = sample_q['categories']['name'] if (sample_q.get('categories') and isinstance(sample_q['categories'], dict)) else "عام"
 
-        # 4. [ السجل المركزي - سوبابيس ]
+        # 5. تهيئة مخازن الرام (النبض المحلي)
+        group_scores = {cid: {} for cid in chats_to_broadcast}
+        messages_to_delete = {cid: [] for cid in chats_to_broadcast}
+        results_to_delete = {cid: [] for cid in chats_to_broadcast}
+        
+       # 4. [ السجل المركزي - سوبابيس ]
         # تسجيل المسابقة ككيان واحد في السحاب
         creator_id = quiz_data.get('owner_id') or 0
         quiz_entry = supabase.table("active_quizzes").insert({
@@ -4688,10 +4707,6 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             p_records = [{"quiz_id": current_quiz_db_id, "chat_id": cid} for cid in chats_to_broadcast]
             supabase.table("quiz_participants").insert(p_records).execute()
 
-        # تجهيز مخازن الرام لبدء الأسئلة
-        group_scores = {cid: {} for cid in chats_to_broadcast}
-        messages_to_delete = {cid: [] for cid in chats_to_broadcast}
-        
         # تهيئة حالة كل مجموعة في قاموس active_quizzes (النبض الحي)
         for cid in chats_to_broadcast:
             active_quizzes[cid] = {
