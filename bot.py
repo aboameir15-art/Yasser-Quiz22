@@ -5098,7 +5098,7 @@ async def unified_answer_checker(m: types.Message):
                             }).execute()
                         except Exception as e: 
                             logging.error(f"❌ خطأ حفظ النتيجة في الجدول الجديد: {e}")
-                    
+
                     # تنفيذ الحفظ في خلفية البوت لضمان السرعة
                     asyncio.create_task(asyncio.to_thread(save_private_to_db))
 
@@ -5106,7 +5106,7 @@ async def unified_answer_checker(m: types.Message):
                     quiz.setdefault('winners', []).append({"name": m.from_user.first_name, "id": uid})
                     
                     # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
-                    f quiz.get('mode') == 'السرعة ⚡':
+                    if quiz.get('mode') == 'السرعة ⚡':
                         quiz['active'] = False
                     return
 
