@@ -804,7 +804,6 @@ async def send_final_results2(chat_id, overall_scores, total_q):
 # ============================================================
 # 1. دوال النظام الذكي (الرتب، التخصصات، الحسابات)
 # ============================================================
-
 def generate_14_digit_bank():
     """توليد رقم حساب بنكي احترافي مكون من 14 رقم"""
     return "".join([str(random.randint(0, 9)) for _ in range(14)])
@@ -962,7 +961,8 @@ async def sync_points_to_global_db(group_scores=None, winners_list=None, cat_nam
 
     except Exception as fatal_e:
         logging.error(f"🚨 خطأ قاتل في محرك المزامنة: {fatal_e}")
-            
+                             
+
 # ============================================================
 # دالة تحديث سجلات المجموعة (الذكاء الجماعي)
 # الوظيفة: حفظ نقاط المجموعة وتحديد العضو الأبرز فيها
