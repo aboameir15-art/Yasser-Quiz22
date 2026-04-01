@@ -5191,30 +5191,53 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     await asyncio.gather(*close_tasks, return_exceptions=True)
     
 
-            # 6️⃣ إغلاق السؤال وتحديث النقاط (نسخة الإعصار 🌪️)
+            # 6️⃣ إغلاق السؤال وتحديث النقاط (نسخة الإعصار المحدثة 🌪️)
             global_winners = []
             global_losers = []  
             
             # 🔥 [ 1. الرادار الذكي: الاعتماد على الذاكرة المفتوحة ] 🔥
-            # نفلتر القائمة لضمان أننا نرسل فقط لمن لم ينسحب ولم يُطرد من المسابقة
             current_active_ids = [
                 int(cid) for cid in chats_to_broadcast 
                 if str(cid) in current_quiz_participants and cid in active_quizzes
             ]
 
-            # 💡 تجميع الفائزين والمخطئين من الرام بسرعة البرق
+            # 💡 تجميع الفائزين والمخطئين من الرام بسرعة البرق مع "الفحص الليزري"
             for cid in current_active_ids:
                 quiz_entry = active_quizzes.get(cid, {})
                 
+                # --- [ فحص الفائزين ] ---
                 for winner in quiz_entry.get('winners', []):
                     winner['home_cid'] = cid  
                     w_id, w_name = winner.get('id'), winner.get('name', "لاعب")
+                    
+                    # 🛡️ [ الرادار ]: يفحص هنا مرة واحدة فقط لكل فائز لضمان السرعة
+                    if 'is_female' not in winner:
+                        try:
+                            # نطلب بياناته مرة واحدة فقط من تليجرام
+                            u_info = await bot.get_chat(w_id)
+                            winner['is_female'] = await deep_privacy_scan(u_info, bot)
+                            # تحديث اليوزر لو كان متاحاً في بيانات تليجرام
+                            if u_info.username: winner['user_name'] = u_info.username
+                        except:
+                            winner['is_female'] = False
+
+                    # إضافة منشن افتراضي لو احتاجناه كاحتياط
                     winner['user_link'] = f'<a href="tg://user?id={w_id}">{w_name}</a>'
                     global_winners.append(winner)
                 
+                # --- [ فحص المخطئين ] ---
                 for loser in quiz_entry.get('losers', []):
                     loser['home_cid'] = cid  
                     l_id, l_name = loser.get('id'), loser.get('name', "لاعب")
+                    
+                    # 🛡️ [ الرادار ]: فحص المخطئين أيضاً
+                    if 'is_female' not in loser:
+                        try:
+                            l_info = await bot.get_chat(l_id)
+                            loser['is_female'] = await deep_privacy_scan(l_info, bot)
+                        except:
+                            loser['is_female'] = False
+
                     loser['user_link'] = f'<a href="tg://user?id={l_id}">{l_name}</a>'
                     global_losers.append(loser)
 
@@ -5230,10 +5253,8 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 local_winners = active_quizzes[cid].get('winners', [])
                 group_points_claimed = False 
                 
-                # جلب اسم المجموعة من الخريطة التي جهزناها في البداية
                 gname = group_names_map.get(str(cid)) or group_names_map.get(cid) or "مجموعة نشطة"
 
-                # 🛡️ منع KeyError القاتل (سبب اختفاء القالب)
                 if cid not in group_scores: group_scores[cid] = {}
 
                 for w in local_winners:
@@ -5241,11 +5262,17 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     pts_earned = w.get('pts', 10)
                     
                     if uid not in group_scores[cid]:
-                        group_scores[cid][uid] = {"name": uname, "mention": w.get('user_link'), "points": 0}
+                        # نمرر حالة 'is_female' للـ group_scores أيضاً لضمان ظهورها في إحصائيات المجموعات
+                        group_scores[cid][uid] = {
+                            "name": uname, 
+                            "mention": w.get('user_link'), 
+                            "points": 0,
+                            "is_female": w.get('is_female', False), # 👈 إضافة هامة
+                            "user_name": w.get('user_name', '')     # 👈 إضافة هامة
+                        }
                     
                     group_scores[cid][uid]['points'] += pts_earned
                     
-                    # حفظ النقاط في سوبابيس (في الخلفية لعدم التعطيل)
                     if not group_points_claimed:
                         final_group_pts = pts_earned + 5
                         asyncio.create_task(update_group_stats(cid, gname, uid, uname, final_group_pts))
@@ -5253,6 +5280,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     else:
                         asyncio.create_task(update_group_stats(cid, gname, uid, uname, 0))
                             
+  
             # 3️⃣ [ بث القالب الملكي - تزامن شامل 🚀 ]
             # هنا نستخدم asyncio.gather لكي تصل النتائج لكل المجموعات في نفس اللحظة
             res_tasks = []
