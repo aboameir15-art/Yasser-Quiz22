@@ -4654,7 +4654,12 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         table = "bot_questions" if is_bot else "questions"
         cat_col = "bot_category_id" if is_bot else "category_id"
         current_style = quiz_data.get('quiz_style', 'السرعة ⚡') 
+        # 1. [ التعريفات الأساسية والتأمين ]
+        creator_id = quiz_data.get('owner_id') or 0
         
+        # استخراج وقت الانتظار (Time Limit) مع قيمة افتراضية 15 ثانية
+        t_limit = int(quiz_data.get('time_limit') or quiz_data.get('time') or 15)
+
         # 2. جلب الأسئلة من سوبابيس بالربط الصحيح
         res_q = supabase.table(table).select("*, categories(name)" if not is_bot else "*").in_(cat_col, cat_ids).execute()
         
