@@ -5119,11 +5119,9 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             # 2️⃣ تحديث السجلات، بونص المجموعة، وقاعدة البيانات
             for cid in current_active_ids:
                 # إغلاق بوابات الاستقبال فوراً
-                active_quizzes[cid]['active'] = False
-                active_quizzes[cid]['question_finished'] = True 
-                
-                local_winners = active_quizzes[cid].get('winners', [])
-                group_points_claimed = False 
+                if cid in active_quizzes: # زيادة تأمين
+                    active_quizzes[cid]['active'] = False
+                    active_quizzes[cid]['question_finished'] = True               
                 
                 # --- [ تحديث الفائزين + بونص الـ 5 نقاط لأول واحد في المجموعة ] ---
                 local_winners = active_quizzes.get(cid, {}).get('winners', [])
@@ -5185,14 +5183,26 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 if isinstance(rm, types.Message):
                     results_to_delete[all_chats[idx]].append(rm.message_id)
             
-            # (اختياري) عداد تنازلي هنا للسؤال التالي
-            # 7️⃣ العداد التنازلي للسؤال القادم
-                        # 7️⃣ العداد التنازلي والمزامنة للسؤال القادم
+            # 7️⃣ العداد التنازلي والمزامنة للجولة القادمة (تأمين المسار 🛡️)
             if i < total_q - 1:
-                # فحص سريع للذاكرة المفتوحة: هل توقفت المسابقة كلياً؟
-                if not current_quiz_participants: break
+                # 🛑 فحص أمان: هل لا يزال هناك مشاركين؟
+                if not current_quiz_participants: 
+                    logging.warning("⚠️ توقف المسابقة: لا يوجد مشاركين للسؤال القادم.")
+                    break
 
-                # تطهير الرام وتجهيزه للجولة التالية
+                # 🔥 [ إعادة توليد الأيديات النشطة ] لضمان عدم حدوث NameError
+                current_active_ids = [
+                    int(cid) for cid in chats_to_broadcast 
+                    if str(cid) in current_quiz_participants and cid in active_quizzes
+                ]
+
+                # إذا لم نجد مجموعات نشطة، ننتظر قليلاً بدل الـ break القاتل
+                if not current_active_ids:
+                    await asyncio.sleep(1)
+                    # هنا يمكنك اختيار الاستمرار أو الكسر حسب رغبتك
+                    # continue 
+
+                # 🧹 تطهير الرام وتجهيزه للجولة التالية (تصفير العدادات)
                 for cid in current_active_ids:
                     if cid in active_quizzes:
                         active_quizzes[cid]['winners'] = []
@@ -5200,12 +5210,14 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         active_quizzes[cid]['question_finished'] = False
                         active_quizzes[cid]['active'] = True 
 
-                # انطلاق عداد "السؤال القادم" المتزامن في كل المجموعات
+                # ⏰ انطلاق عداد "السؤال القادم" المتزامن
+                # استخدمنا return_exceptions لضمان أن فشل مجموعة لا يوقف البقية
                 count_tasks = [run_countdown(cid) for cid in current_active_ids]
-                await asyncio.gather(*count_tasks, return_exceptions=True)                                                    
+                if count_tasks:
+                    await asyncio.gather(*count_tasks, return_exceptions=True)                                                    
             else:
-                await asyncio.sleep(1) # وقفة قصيرة قبل النهاية الكبرى
-        
+                # نهاية المسابقة الملكية
+                await asyncio.sleep(1)
 
         # 🏁 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
         
