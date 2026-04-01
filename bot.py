@@ -589,18 +589,20 @@ async def deep_privacy_scan(user, bot):
 
     return False
     
- 
+
 
 async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_public=False, mode="السرعة ⚡", group_names=None, losers=None):
     """
     🎁 نسخة الهدية - قالب ياسر الملكي (التطوير النهائي 2026)
-    تم دمج درع حماية الخصوصية "الماسح الليزري" مع الحفاظ على التصميم الفخم.
+    تم إصلاح اختفاء القالب عبر الاعتماد على البيانات الجاهزة وتأمين أسماء المجموعات.
     """
+    from html import escape
+    
     mode_icon = "⚡" if "سرعة" in mode else "⏰"
     
     msg = f"🏆 <b>تـفـاصـيـل الـجـولـة الـمـلـكـيـة</b> {mode_icon}\n"
     msg += "  ━━━━━━━━━━━━━━━━━━\n"
-    msg += f"🎯 الإجابة: <b>「 {correct_ans} 」</b>\n"
+    msg += f"🎯 الإجابة: <b>「 {escape(str(correct_ans))} 」</b>\n"
     msg += "  ━━━━━━━━━━━━━━━━━━\n\n"
 
     # --- [ 1. عرض الأبطال (الناجحين) ] ---
@@ -610,35 +612,30 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
         for idx, w in enumerate(winners):
             medal = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉" if idx == 2 else "🏅" if idx == 3 else "🎖"
             
-            raw_name = w.get('name', 'لاعب مجهول')
+            raw_name = escape(w.get('name', 'لاعب مجهول'))
             u_id = w.get('id')
-            u_user = w.get('user_name') # اليوزر من قاعدة البيانات
+            u_user = w.get('user_name') 
             u_home = str(w.get('home_cid', ''))
             time_val = w.get('time', 0.0)
             pts = w.get('pts', 0)
             current_chat = str(chat_id)
 
-            # تنظيف اليوزر
             if u_user: u_user = u_user.replace('@', '')
 
-            # 🛡️ [ الرادار يعمل في الكواليس ]
-            try:
-                user_info = await bot.get_chat(u_id)
-                is_female = await deep_privacy_scan(user_info, bot)
-            except:
-                is_female = False 
+            # 🛡️ [ الرادار يقرأ من الذاكرة الجاهزة فقط لمنع البطء ]
+            is_female = w.get('is_female', False) 
 
             # ⚖️ [ نظام الحماية + الضيافة الموحد ]
             if is_female:
                 user_link = f"<b>{raw_name}</b>"
             elif current_chat != u_home:
-                # بطل ضيف (شاب)
+                # بطل ضيف (شاب) - تفعيل الرابط
                 if u_user:
                     user_link = f'<a href="https://t.me/{u_user}">{raw_name}</a>'
                 else:
                     user_link = f'<a href="tg://user?id={u_id}">{raw_name}</a>'
             else:
-                # صاحب البيت (شاب)
+                # صاحب البيت (شاب) - اسم عريض
                 user_link = f"<b>{raw_name}</b>"
             
             msg += f"{medal} ا:ا ⇠ {user_link} + (<code>{pts}</code>ن)\n"
@@ -652,7 +649,7 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
     if losers:
         msg += "  ╭─── { <b>إجابات خاطئة</b> } ───\n"
         for l in losers:
-            raw_l_name = l.get('name', 'لاعب')
+            raw_l_name = escape(l.get('name', 'لاعب'))
             l_id = l.get('id')
             l_user = l.get('user_name')
             l_home = str(l.get('home_cid', ''))
@@ -661,24 +658,17 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
 
             if l_user: l_user = l_user.replace('@', '')
 
-            # 🛡️ [ الفحص الخفي للمخطئين ]
-            try:
-                l_user_info = await bot.get_chat(l_id)
-                l_is_female = await deep_privacy_scan(l_user_info, bot)
-            except:
-                l_is_female = False
+            # 🛡️ [ فحص المخطئين من الذاكرة ]
+            l_is_female = l.get('is_female', False)
 
-            # ⚖️ [ نظام الحماية + الضيافة للمخطئين ]
             if l_is_female:
                 l_link = f"<b>{raw_l_name}</b>"
             elif current_chat != l_home:
-                # ضيف مخطئ (شاب)
                 if l_user:
                     l_link = f'<a href="https://t.me/{l_user}">{raw_l_name}</a>'
                 else:
                     l_link = f'<a href="tg://user?id={l_id}">{raw_l_name}</a>'
             else:
-                # ابن المجموعة (شاب)
                 l_link = f"<b>{raw_l_name}</b>"
             
             msg += f"❌ ا:ا ⇠ {l_link} (خصم <code>{penalty}</code>ن)\n"
@@ -697,73 +687,69 @@ async def send_creative_results(chat_id, correct_ans, winners, group_scores, is_
                 group_ranking.append({'id': gid, 'points': total_group_pts, 'players': sorted_local_players})
         
         sorted_groups = sorted(group_ranking, key=lambda x: x['points'], reverse=True)
-        # --- [ 3. إحصائيات المجموعات (نظام الفرسان المطور) ] ---
+
         for i, g in enumerate(sorted_groups):
-            g_id_str = str(g['id'])
-            g_name = group_names.get(g_id_str, f"جروب {g_id_str}") if group_names else f"جروب {g_id_str}"
+            # 🛠️ [ إصلاح جلب الأسماء ]: محاولة الجلب بكل الصيغ الممكنة
+            g_id_raw = g['id']
+            g_name = "مجموعة غير مسجلة"
+            if group_names:
+                g_name = group_names.get(str(g_id_raw)) or group_names.get(int(g_id_raw)) or f"جروب {g_id_raw}"
+            
             g_medal = "⭐" if i == 0 else "🔹"
             
+            # 🔥 [ فصل عداد المجموعة عن نقاط اللاعبين ]
             msg += f"\n{g_medal} <b>{g_name}</b>\n"
-            msg += f"🔹 رصيد المجموعة: (<code>{g['points']}</code>ن)\n"
+            msg += f"📊 إجمالي رصيد الجروب: (<code>{g['points']}</code>ن)\n"
+            msg += f"👤 <b>فرسان المجموعة:</b>\n"
             
-            # --- [ تعديل الربط الذكي والحماية ] ---
             for player in g['players']:
-                # 🔍 محاولة استعادة البيانات المفقودة من القائمة العالمية
                 p_id = player.get('id')
-                p_name = player.get('name', 'لاعب مجهول')
+                p_name = escape(player.get('name', 'لاعب مجهول'))
                 p_user = player.get('user_name') 
-                p_home = g_id_str # المجموعة الحالية هي موطنه
+                p_home = str(g_id_raw)
                 current_chat = str(chat_id)
+                p_pts_round = player.get('points', 0)
 
-                # إذا لم نجد الـ ID في الـ player، نبحث عنه في الـ winners لربط الرابط
+                # ربط الآيدي من قائمة الفائزين لو كان مفقوداً
                 if not p_id:
                     for w in winners:
                         if w.get('name') == p_name:
                             p_id = w.get('id')
                             p_user = w.get('user_name')
                             break
-                
-                # تنظيف اليوزر
+
                 if p_user: p_user = p_user.replace('@', '')
 
-                # 🛡️ الرادار الخفي لحماية البنات
-                p_is_female = False
-                if p_id:
-                    try:
-                        p_info = await bot.get_chat(p_id)
-                        p_is_female = await deep_privacy_scan(p_info, bot)
-                    except: pass
+                # 🛡️ الرادار من الذاكرة
+                p_is_female = player.get('is_female', False)
 
-                # ⚖️ تطبيق قواعد الحماية + الضيافة (الربط الذكي)
                 if p_is_female:
                     p_link = f"<b>{p_name}</b>"
                 elif p_id:
                     if current_chat != p_home:
-                        # بطل ضيف (تفعيل الرابط)
                         if p_user:
                             p_link = f'<a href="https://t.me/{p_user}">{p_name}</a>'
                         else:
                             p_link = f'<a href="tg://user?id={p_id}">{p_name}</a>'
                     else:
-                        # ابن المجموعة (اسم عريض فقط)
                         p_link = f"<b>{p_name}</b>"
                 else:
-                    # في حال فشل كل شيء، نكتفي بالاسم
                     p_link = f"<b>{p_name}</b>"
 
-                icon = "👤 ا:ا"
-                msg += f"{icon} {p_link} ⇠ <b>{player.get('points', 0)}</b> ن\n"
+                msg += f"   ⇠ {p_link} : <code>{p_pts_round}</code> ن\n"
             
             msg += "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
 
     msg += "\n🔥 <i>استعد.. السؤال التالي في الطريق!</i>"
 
     try:
-        return await bot.send_message(chat_id, msg, parse_mode="HTML")
+        return await bot.send_message(chat_id, msg, parse_mode="HTML", disable_web_page_preview=True)
     except Exception as e:
         import logging
-        logging.error(f"⚠️ HTML Parsing Error: {e}")
-        clean_text = msg.replace("<b>", "").replace("</b>", "").replace("<code>", "").replace("</code>", "").replace("<i>", "").replace("</i>", "")
+        logging.error(f"⚠️ HTML Parsing Error in Results: {e}")
+        # محاولة أخيرة بنص نظيف تماماً في حال فشل الـ HTML
+        import re
+        clean_text = re.sub('<[^<]+?>', '', msg)
         return await bot.send_message(chat_id, clean_text)
         
 
