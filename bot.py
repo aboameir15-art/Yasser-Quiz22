@@ -3733,7 +3733,7 @@ async def show_quizzes(obj):
 # ==========================================
 # [2] المحرك الأمني ولوحة التحكم (التشطيب النهائي المصلح)
 # ==========================================
-@dp.callback_query_handler(lambda c: c.data.startswith(('run_', 'close_', 'confirm_del_', 'final_del_', 'edit_time_', 'manage_quiz_', 'quiz_settings_', 'set_c_', 'set_t_', 'toggle_speed_', 'toggle_scope_', 'toggle_hint_', 'toggle_style_', 'save_quiz_process_')), state="*")
+@dp.callback_query_handler(lambda c: c.data.startswith(('run_', 'close_', 'confirm_del_', 'final_del_', 'toggle_time_’, 'toggle_count_', 'edit_time_', 'manage_quiz_', 'quiz_settings_', 'set_c_', 'set_t_', 'toggle_speed_', 'toggle_scope_', 'toggle_hint_', 'toggle_style_', 'save_quiz_process_')), state="*")
 async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
     try:
         data_parts = c.data.split('_')
