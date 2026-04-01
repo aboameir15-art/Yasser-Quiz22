@@ -1615,50 +1615,45 @@ async def run_visual_countdown(base_info, kb):
 
 async def start_broadcast_process(c: types.CallbackQuery, quiz_id: int, owner_id: int):
     try:
-        # 1. جلب بيانات المسابقة (مع جلب تفاصيل الأقسام والأسئلة)
+        # 1. جلب بيانات المسابقة
         res_q = supabase.table("saved_quizzes").select("*").eq("id", quiz_id).single().execute()
         q_data = res_q.data
         if not q_data: return await c.answer("❌ تعذر العثور على قاعدة بيانات المسابقة")
 
-        # 2. تحليل الأقسام (لو كانت متعددة)
-        # نفترض أن q_data يحتوي على قائمة أو نص يحدد الأقسام
+        # 2. تجهيز البيانات والأسماء
         raw_categories = q_data.get('category_name', 'عام')
-        # تحويلها لشكل جمالي: لو كانت "دين, تاريخ" تصبح "🔹 دين | 🔸 تاريخ"
         styled_categories = " | ".join([f"💎 {cat.strip()}" for cat in str(raw_categories).split(',')])
-        
         total_qs = q_data.get('total_questions', '??')
+        owner_name = c.from_user.first_name
+        owner_id_current = c.from_user.id # 👈 تأكد من تعريفها هنا لمنع خطأ undefined
 
-        # 3. جلب المجموعات النشطة
+        # 3. جلب المجموعات وتصفير الجلسة
         groups_res = supabase.table("groups_hub").select("group_id, group_name").eq("status", "active").execute()
         if not groups_res.data: return await c.answer("⚠️ رادار الهب لا يرصد مجموعات نشطة!")
 
-        owner_name = c.from_user.first_name
         active_competition_sessions.clear()
 
-        # ✨ [ قالب المستقبل: واجهة المحرك ] ✨
+        # ✨ [ قالب المستقبل ]
         base_info = (
             f"🚀 **انطلاق البروتوكول الملكي** ™️\n"
-            f"📡 `Status: Initializing Broadcast...` \n"
             f"━━━━━━━━━━━━━━\n"
             f"🏆 التحدي: **{q_data.get('quiz_name', 'تحدي الأبطال')}**\n"
             f"🧩 الأقسام: **{styled_categories}**\n"
             f"📊 الأسئلة: **{total_qs} جولة**\n"
             f"👤 القائد: **{owner_name}**\n"
-            f"━━━━━━━━━━━━━━\n"
-            f"🕒 `Time Lock: 10 Seconds to Launch`"
+            f"━━━━━━━━━━━━━━"
         )
 
         kb = InlineKeyboardMarkup().add(
             InlineKeyboardButton("🚫 سحب المجموعة من المسابقة", callback_data=f"cancel_session_{quiz_id}")
         )
 
-        # 4. إذاعة النبض الأولي
+        # 4. إذاعة النبض الأولي لجميع المجموعات
         for g in groups_res.data:
             cid = g['group_id']
             try:
                 msg = await bot.send_message(cid, f"{base_info}\n\n⚙️ **جاري ربط الأنظمة المزامنة...**", 
                                            parse_mode="Markdown", reply_markup=kb)
-                
                 active_competition_sessions[cid] = {
                     'group_name': g.get('group_name', 'Unknown'),
                     'msg_id': msg.message_id,
@@ -1666,36 +1661,37 @@ async def start_broadcast_process(c: types.CallbackQuery, quiz_id: int, owner_id
                 }
             except: continue
 
-        # 5. فترة "المزامنة الكونيه" (10 ثوانٍ)
+        # 🔥 [ الخطوة المفقودة ]: استدعاء العداد التنازلي البصري 🔥
+        # هنا سيبدأ الـ (🔟, 9️⃣, 8️⃣...) بالظهور في كل المجموعات
         await run_visual_countdown(base_info, kb)
 
+        # 5. الفرز النهائي للمجموعات الصامدة
         final_active_ids = list(active_competition_sessions.keys())
 
         if final_active_ids:
-            # ✨ تحديث بصري "مستقبلي" قبل الانطلاق
+            # تحديث أخير قبل تسليم الأرواح للمحرك
             for cid in final_active_ids:
                 try:
                     await bot.edit_message_text(
                         f"✅ **تـم اكتمال الربط الموحد!**\n"
-                        f"━━━━━━━━━━━━━━\n"
-                        f"📡 مجموعات البث: `{len(final_active_ids)}` مجموعة نشطة\n"
-                        f"🚀 **ستنطلق أول دفعة الآن.. استعدوا!**\n"
-                        f"━━━━━━━━━━━━━━\n"
-                        f"🎮 `System Status: Battle Mode Active`",
+                        f"🚀 **ستنطلق أول دفعة الآن.. استعدوا!**",
                         cid, active_competition_sessions[cid]['msg_id'], parse_mode="Markdown"
                     )
                 except: pass
 
-            q_data['owner_id'] = c.from_user.id
+            # إضافة آيدي المالك للبيانات قبل الإرسال لمنع خطأ creator_id
+            q_data['owner_id'] = owner_id_current
+            
+            # 🚀 انطلاق المحرك العالمي في الخلفية
             asyncio.create_task(engine_global_broadcast(final_active_ids, q_data, owner_name))
-            logging.info(f"📡 [صانع]: تم تسليم {len(final_active_ids)} خلية للمحرك الرئيسي.")
-
+            logging.info(f"📡 [صانع]: تم تسليم {len(final_active_ids)} خلية للمحرك.")
         else:
             await bot.send_message(owner_id, "⚠️ **فشل البروتوكول:** تم سحب جميع المجموعات.")
 
     except Exception as e:
-        logging.error(f"🚨 Engine Future Template Error: {e}")
-        
+        logging.error(f"🚨 Engine Launch Error: {e}")
+
+
 # --- [ 1. الدوال الخدمية - الربط مع سوبابيس ] ---
 async def get_user_full_data(user_id: int):
     """جلب بيانات اللاعب من جدول users_global_profile"""
