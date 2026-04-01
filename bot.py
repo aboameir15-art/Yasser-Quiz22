@@ -4833,8 +4833,6 @@ async def run_countdown(chat_id):
         except: pass
     except: pass
 
-
-# 3️⃣ المحرك الرئيسي الموحد (نسخة ياسر المطورة 2026)
 async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_db_id=None):
     # 1. [ المندوب سلم القائمة ]
     input_ids = chat_ids if isinstance(chat_ids, list) else [chat_ids]
@@ -4930,20 +4928,18 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         # 🟢 [ الخطوة 1: المشرف ] إنشاء سجل المسابقة المركزي
         try:
             creator_id = quiz_data.get('owner_id') or quiz_data.get('created_by') or 0
-            
-            # 1. إنشاء السجل في سوبابيس (المرجع الصلب)
+          
             quiz_entry = supabase.table("active_quizzes").insert({
                 "quiz_name": f"إذاعة {owner_name}",
                 "created_by": creator_id,
                 "is_global": True,
+                "is_paused": False, # الرادار يبدأ أخضر 🟢
                 "is_active": True,
-                "is_paused": False, 
-                "participants_ids": chats_to_broadcast,
+                "participants_ids": [group_names_map.get(str(c), str(c)) for c in chats_to_broadcast],
                 "total_questions": total_q,
                 "quiz_type": "public",
-                "category_name": main_cat_name,
-                "quiz_style": current_style,
-                "quiz_owner_id": creator_id,
+                "category_name": main_cat_name, # 👈 تم الإصلاح هنا            
+                "quiz_owner_id": quiz_data.get('owner_id')",
                 "quiz_owner_name": owner_name
             }).execute()
 
@@ -4960,7 +4956,6 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
         # --- [ د ] دورة البث الموحدة ---
         for i, q in enumerate(selected_questions):
-            current_active_ids = [] # 🛡️ تأمين: المتغير الآن موجود وله قيمة (قائمة فارغة)
             answered_users_global[i + 1] = [] 
 
             ans = str(q.get('correct_answer') or q.get('answer_text') or "").strip()
@@ -4975,14 +4970,14 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             if current_quiz_db_id:
                 try:
                     supabase.table("active_quizzes").update({
-                        "quiz_style": current_style,
-                        "question_finished": False,
-                        "hint_sent": False,
                         "current_answer": ans,
-                        "participants_ids": chats_to_broadcast,
+                        "question_finished": False,
                         "current_index": i + 1,
+                        "hint_sent": False,
                         "question_category_name": cat_name, # 👈 يظهر الآن (تاريخ، جغرافيا..)
                         "is_active": True,
+                        "quiz_style": current_style,
+                        "participants_ids": chats_to_broadcast,
                         "votes_results": {"0": 0, "1": 0, "2": 0, "3": 0}, # تصفير التصويت
                         "voter_list": {}, # تصفير القائمة
                         "user_choices": {}
@@ -4994,9 +4989,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             for cid in chats_to_broadcast:
                 active_quizzes[cid] = {
                     "active": True,
-                    "quiz_style": current_style,
                     "question_finished": False,
-                    "hint_sent": False,
                     "ans": ans,
                     "winners": [],
                     "voted_users": [], 
@@ -5054,37 +5047,20 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         active_quizzes[cid]['last_poll_id'] = m.message_id
 
             # 5️⃣ [ محرك الانتظار الموحد ]
-            # 5️⃣ [ محرك الانتظار الذكي ]
             t_limit = int(quiz_data.get('time_limit', 15))
             start_wait = time.time()
             
-            # 🔥 الحل: تعريف القائمة هنا أولاً
-            active_chats = [cid for cid in chats_to_broadcast if str(cid) in current_quiz_participants and cid in active_quizzes]
-
+            # حلقة مراقبة ذكية (تنتظر حتى انتهاء الوقت أو إجابة الجميع)
             while time.time() - start_wait < t_limit:
-                # تحديث القائمة داخل اللوب لضمان "النبض" المستمر
-                active_chats = [cid for cid in chats_to_broadcast if str(cid) in current_quiz_participants and cid in active_quizzes]
+                # التحقق هل لا يزال هناك أي مجموعة نشطة؟
+                still_active = any(active_quizzes.get(c, {}).get('question_finished') for c in chats_to_broadcast)
                 
-                if not active_chats:
-                    await asyncio.sleep(0.5)
-                    continue # استمر ولا تعمل break عشان ما يموت المحرك
-
-                # الآن السطر هذا سيعمل لأن active_chats معرفة
-                is_answered = any(active_quizzes.get(c, {}).get('question_finished') for c in active_chats)
+                if not still_active:
+                    logging.info("⚡ الرادار أعطى إشارة إغلاق.. الانتقال للنتائج فوراً.")
+                    break
                 
-                if is_answered:
-                    logging.info("⚡ [سرعة]: تم حسم السؤال! كسر حلقة الانتظار.")
-                    break              
-                
+                # تقليل النوم لـ 0.05 لضمان حساسية عالية جداً
                 await asyncio.sleep(0.1)
-
-            # استكمال العمل بالـ final_active كما في كودك القديم
-            final_active = [cid for cid in chats_to_broadcast if str(cid) in current_quiz_participants]
-            
-            for cid in final_active:
-                if cid in active_quizzes:
-                    active_quizzes[cid]['question_finished'] = True
-                    active_quizzes[cid]['active'] = False 
 
             # 🛑 [ الحركة القاضية - إغلاق الاستطلاعات ]
             # إذا كان النمط "اختيارات"، نغلق الـ Poll في كل المجموعات فوراً عند انتهاء الوقت
@@ -5103,30 +5079,37 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             # 6️⃣ إغلاق السؤال وتحديث النقاط (داخل حلقة الأسئلة)
             res_tasks = []
             # 🏁 [ محرك القوة العالمية - التشطيب الملكي الصافي ]
-            # 1️⃣ تجميع الأبطال والمخطئين عالمياً (بيانات صافية بدون إضافات نصية)
-            global_winners = []
-            global_losers = []
             
+            # 1️⃣ تجميع الفائزين والمخطئين من كل المجموعات (للقالب الملكي)
+            global_winners = []
+            global_losers = []         
             for cid in all_chats:
                 if cid in active_quizzes:
-                    # تجميع الفائزين كما هم
-                    global_winners.extend(active_quizzes[cid].get('winners', []))
-                    # تجميع المخطئين كما هم
-                    global_losers.extend(active_quizzes[cid].get('losers', []))
-            
-            # ترتيب الفائزين عالمياً حسب السرعة (الأسرع يتصدر القائمة 🥇)
-            global_winners = sorted(global_winners, key=lambda x: x.get('time', 0))
+                    # --- [ تجميع الفائزين ] ---
+                    for winner in active_quizzes[cid].get('winners', []):
+                        winner['home_cid'] = cid  
+                        winner['user_name'] = winner.get('username') 
+                        global_winners.append(winner)
+                    
+                    # --- [ تجميع المخطئين ] ---
+                    for loser in active_quizzes[cid].get('losers', []):
+                        loser['home_cid'] = cid  
+                        loser['user_name'] = loser.get('name', 'لاعب') 
+                        global_losers.append(loser)
 
+            # 🏆 ترتيب ملوك العالم حسب السرعة (الأسرع يتصدر 🥇)
+            global_winners = sorted(global_winners, key=lambda x: x.get('time', 0))
+            
             # 2️⃣ تحديث السجلات، بونص المجموعة، وقاعدة البيانات
-            for cid in current_active_ids:
-                # إغلاق بوابات الاستقبال فوراً
-                if cid in active_quizzes: # زيادة تأمين
+            for cid in all_chats:
+                if cid in active_quizzes:
                     active_quizzes[cid]['active'] = False
-                    active_quizzes[cid]['question_finished'] = True               
-                
-                # --- [ تحديث الفائزين + بونص الـ 5 نقاط لأول واحد في المجموعة ] ---
+
+                # --- [ منطق الفائزين ونظام النخبة (أول إجابة للمجموعة) ] ---
                 local_winners = active_quizzes.get(cid, {}).get('winners', [])
-                group_bonus_awarded = False 
+                
+                # 🚩 قفل المجموعة: أول لاعب يمر يمنح المجموعة النقاط ويغلق الباب
+                group_points_claimed = False 
 
                 for w in local_winners:
                     uid, uname, pts_earned = w['id'], w['name'], w.get('pts', 10)
@@ -5134,23 +5117,28 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     if uid not in group_scores[cid]:
                         group_scores[cid][uid] = {"name": uname, "points": 0}
                     
-                    # منطق البونص: المجموعة تأخذ 5 نقاط إضافية مع أول فائز فقط
-                    final_pts = pts_earned
-                    if not group_bonus_awarded:
-                        final_pts += 5
-                        group_bonus_awarded = True 
+                    # ⚖️ تطبيق العدالة: إذا لم تأخذ المجموعة نقاطها لهذا السؤال بعد
+                    if not group_points_claimed:
+                        # هذا هو "قناص" المجموعة الأول
+                        final_pts = pts_earned + 5 # بونص أول إجابة للمجموعة
+                        group_points_claimed = True # 🔒 إغلاق النقاط لهذه المجموعة
+                        
+                        # تحديث الذاكرة المحلية (رصيد المجموعة)
+                        group_scores[cid][uid]['points'] += final_pts
+                        
+                        # تحديث سوبابيس (العالمي) للمجموعة
+                        try:
+                            gname = group_names_map.get(cid, "مجموعة مجهولة")
+                            await update_group_stats(cid, gname, uid, uname, final_pts)
+                        except Exception as e:
+                            logging.error(f"⚠️ خطأ سوبابيس: {e}")
+                    else:
+                        # باقي اللاعبين في نفس المجموعة:
+                        # تضاف نقاطهم لبروفايلهم الشخصي (اختياري) ولكن لا ترفع رصيد المجموعة
+                        # هنا نتركها فارغة للحفاظ على التوازن العالمي
+                        pass
 
-                    # تحديث الذاكرة المحلية (لتظهر في رصيد المجموعة بالقالب)
-                    group_scores[cid][uid]['points'] += final_pts
-                    
-                    # تحديث سوبابيس (العالمي)
-                    try:
-                        gname = group_names_map.get(cid, "مجموعة مجهولة")
-                        await update_group_stats(cid, gname, uid, uname, final_pts)
-                    except Exception as e:
-                        logging.error(f"⚠️ خطأ سوبابيس: {e}")
-
-                # --- [ تحديث المخطئين (الخصم) ] ---
+                # --- [ تحديث المخطئين (الخصم الفردي) ] ---
                 local_losers = active_quizzes.get(cid, {}).get('losers', [])
                 for l in local_losers:
                     l_uid, l_uname, penalty = l['id'], l['name'], l.get('penalty', 5)
@@ -5158,6 +5146,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     if l_uid not in group_scores[cid]:
                         group_scores[cid][l_uid] = {"name": l_uname, "points": 0}
                     
+                    # الخصم يظل فردياً لضمان الانضباط
                     group_scores[cid][l_uid]['points'] -= penalty
                     
                     try:
@@ -5166,12 +5155,12 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     except Exception as e:
                         logging.error(f"⚠️ خطأ خصم سوبابيس: {e}")
 
-                # 3️⃣ إرسال القالب الملكي (بالتنسيق الفخم الذي صممته)
+                # 3️⃣ إرسال القالب الملكي الفخم
                 res_tasks.append(send_creative_results(
                     chat_id=cid, 
                     correct_ans=ans, 
-                    winners=global_winners,  # القائمة مرتبة عالمياً وصافية تماماً
-                    losers=global_losers,    # قائمة المخطئين صافية
+                    winners=global_winners,  
+                    losers=global_losers,    
                     group_scores=group_scores, 
                     is_public=True,
                     mode=quiz_data.get('mode', 'السرعة ⚡'),
@@ -5184,8 +5173,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 if isinstance(rm, types.Message):
                     results_to_delete[all_chats[idx]].append(rm.message_id)
             
-            # 7️⃣ العداد التنازلي والمزامنة للجولة القادمة (تأمين المسار 🛡️)
-                        # (اختياري) عداد تنازلي هنا للسؤال التالي
+            # (اختياري) عداد تنازلي هنا للسؤال التالي
             # 7️⃣ العداد التنازلي للسؤال القادم
             if i < total_q - 1:
                 for cid in all_chats:
@@ -5194,14 +5182,14 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 count_tasks = [run_countdown(cid) for cid in all_chats]
                 await asyncio.gather(*count_tasks, return_exceptions=True)
             else:
-                await asyncio.sleep(2)
-   
-
-        # 🏁 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
+                await asyncio.sleep(2)       
+        # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
+        # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️ (المسافة: 8 فراغات)
         
+        # تعريف الدالة الخلفية للقيام بالمهام الثقيلة
         async def global_cleanup_worker(q_id, chats, scores, cat):
             try:
-                # 1. إرسال النتائج النهائية (الترتيب العالمي والمحلي)
+                # 1. إرسال النتائج لكل المجموعات (توازي خفيف)
                 for cid in chats:
                     try:
                         await send_broadcast_final_results(
@@ -5213,39 +5201,37 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         await asyncio.sleep(0.1) 
                     except: continue
 
-                # 2. المزامنة النهائية مع سوبابيس (مرة واحدة للمسابقة كاملة)
+                # 2. الجرد والترحيل من سوبابيس (مرة واحدة فقط)
                 if q_id:
+                    # تنفيذ طلب سوبابيس في Thread جانبي لمنع تجمد المحرك
                     loop = asyncio.get_event_loop()
-                    # ترحيل النقاط للجدول العالمي
-                    await sync_points_to_global_db(group_scores=scores, quiz_id=q_id, cat_name=cat)
+                    log_res = await loop.run_in_executor(None, lambda: (
+                        supabase.table("answers_log").select("*").eq("quiz_id", q_id).execute()
+                    ))
                     
-                    # 🗑️ مسح سجل المسابقة النشطة من سوبابيس
+                    if log_res.data:
+                        await sync_points_to_global_db(group_scores={}, quiz_id=q_id, cat_name=cat)
+                        logging.info(f"✅ تم ترحيل نتائج الإذاعة {q_id} بنجاح.")
+
+                    # 3. 🔥 [ المحرقة ] - مسح سجلات الإذاعة من قاعدة البيانات
                     await loop.run_in_executor(None, lambda: (
                         supabase.table("active_quizzes").delete().eq("id", q_id).execute()
                     ))
-                    logging.info(f"✅ تم ترحيل وتنظيف بيانات المسابقة {q_id} من القاعدة.")
 
-                # 3. 🔥 [ محرقة الرسائل والاستفتاءات ] 🔥
+                # 4. تنظيف الرسائل بهدوء (خلفية)
                 for cid in chats:
-                    # تجميع كل الرسائل: (أسئلة + نتائج فرعية + استفتاءات)
-                    all_mids = list(set(messages_to_delete.get(cid, []) + results_to_delete.get(cid, [])))
-                    
-                    for idx, mid in enumerate(all_mids):
+                    all_mids = messages_to_delete.get(cid, []) + results_to_delete.get(cid, [])
+                    for i, mid in enumerate(all_mids):
                         try: 
-                            # محاولة حذف الرسالة (سواء كانت نصية أو Poll)
                             await bot.delete_message(cid, mid)
-                            
-                            # موازن السرعة لمنع الحظر (Flood)
-                            if (idx + 1) % 10 == 0: 
-                                await asyncio.sleep(1)
-                        except Exception as e:
-                            # إذا فشل الحذف (مثلاً الرسالة محذوفة أصلاً)، نتخطى بهدوء
-                            pass
+                            if i % 5 == 0: await asyncio.sleep(1)
+                        except: pass
 
             except Exception as e:
                 logging.error(f"🚨 Background Global Cleanup Error: {e}")
 
-        # 🚀 إطلاق مهمة التنظيف في الخلفية لكي لا ينتظر المستخدم
+        # 🚀 [ إطلاق المهمة فوراً ]
+        # تأكد أن asyncio مستورد في أعلى الملف لتجنب Fatal Error
         asyncio.create_task(global_cleanup_worker(
             current_quiz_db_id, 
             all_chats, 
@@ -5255,16 +5241,14 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
     except Exception as e:
         logging.error(f"🚨 Global Engine Fatal Error: {e}")
-    
     finally:
+        # 🔓 فتح القفل الفوري وتصفير الرام (أهم خطوة لمنع التداخل)
         for cid in all_chats: 
             active_broadcasts.discard(cid)
             if cid in active_quizzes: del active_quizzes[cid]
-            # استخدام get لتجنب الخطأ إذا لم يكن موجوداً
-            if cid in overall_scores: 
-                overall_scores.pop(cid, None)
-        logging.info("✨ تم تنظيف الذاكرة بالكامل.. نظام الإذاعة في وضع الاستعداد.")
-      
+            if cid in overall_scores: del overall_scores[cid]
+        
+        logging.info("✨ نظام الإذاعة العامة عاد للوضع الجاهز (Idle).")
 
 # =======================================
 # --- [ بداية الدالة من العمود 0 لضمان عدم وجود SyntaxError ] ---
