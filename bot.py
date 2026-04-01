@@ -1522,47 +1522,53 @@ async def security_checkpoint(m: types.CallbackQuery or types.Message):
 
     # 1️⃣ فحص نوع الدردشة (المنع من الخاص)
     if c_type == 'private':
-        await m.answer("⚠️ الإذاعة العامة تعمل فقط داخل المجموعات المفعّلة.", show_alert=True)
+        if isinstance(m, types.CallbackQuery):
+            await m.answer("⚠️ الإذاعة العامة تعمل فقط داخل المجموعات المفعّلة.", show_alert=True)
         return False
 
     # 2️⃣ فحص تفعيل المجموعة (الشرط الأساسي)
     try:
         res_group = supabase.table("groups_hub").select("status").eq("group_id", cid).execute()
         if not res_group.data or res_group.data[0]['status'] != 'active':
-            await m.answer("🚫 هذه المجموعة غير مفعّلة في نظام أثير. لا يمكن تشغيل المسابقات العامة هنا.", show_alert=True)
+            if isinstance(m, types.CallbackQuery):
+                await m.answer("🚫 المجموعة غير مفعّلة في نظام أثير.", show_alert=True)
             return False
     except Exception as e:
         logging.error(f"Error in Group Check: {e}")
         return False
 
     # 3️⃣ فحص الأهلية (مشرف أو خبير إجابات)
-    is_admin = False
+    is_eligible = False
     try:
         member = await bot.get_chat_member(cid, uid)
         if member.status in ['creator', 'administrator']:
-            is_admin = True
+            is_eligible = True
     except: pass
 
-    if is_admin:
-        return True # المشرف مسموح له دائماً في المجموعة المفعلة
-
-    # إذا لم يكن مشرفاً، نبحث في سجل الإجابات
-    try:
-        res_user = supabase.table("users_global_profile").select("correct_answers_count").eq("user_id", uid).execute()
-        if res_user.data:
-            ans_count = res_user.data[0].get('correct_answers_count', 0)
-            if ans_count >= 150:
-                return True # لاعب خبير مسموح له
+    if not is_eligible:
+        # إذا لم يكن مشرفاً، نبحث في سجل الإجابات
+        try:
+            res_user = supabase.table("users_global_profile").select("correct_answers_count").eq("user_id", uid).execute()
+            if res_user.data:
+                ans_count = res_user.data[0].get('correct_answers_count', 0)
+                if ans_count >= 150:
+                    is_eligible = True
+                else:
+                    if isinstance(m, types.CallbackQuery):
+                        await m.answer(f"⚠️ مشرف أو 150 إجابة (رصيدك: {ans_count})", show_alert=True)
+                    return False
             else:
-                await m.answer(f"⚠️ عذراً! يجب أن تكون مشرفاً أو لديك 150 إجابة صحيحة (رصيدك: {ans_count}).", show_alert=True)
+                if isinstance(m, types.CallbackQuery):
+                    await m.answer("⚠️ لم يتم العثور على ملفك الشخصي.", show_alert=True)
                 return False
-        else:
-            await m.answer("⚠️ لم يتم العثور على ملفك الشخصي. شارك في المسابقات أولاً!", show_alert=True)
+        except Exception as e:
+            logging.error(f"Error in User Check: {e}")
             return False
-    except Exception as e:
-        logging.error(f"Error in User Check: {e}")
-        return False
-        
+
+    # ✨ [ لمسة الصانع ]: إذا نجح الفحص، نعيد آيدي الشخص (الذي سيصبح creator_id)
+    if is_eligible:
+        return uid 
+    return False
 
 async def run_visual_countdown(base_info, kb):
     """
