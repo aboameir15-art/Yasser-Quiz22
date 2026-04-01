@@ -1501,6 +1501,59 @@ async def get_group_status(chat_id):
         logging.error(f"Error checking group status: {e}")
         return "error"
 # ==========================================
+# ==========================================
+# --- [  دالة فحص قبل الإعلان ] ---
+# ==========================================
+async def security_checkpoint(m: types.CallbackQuery or types.Message):
+    # ميزة: التعامل مع الضغطة (Callback) أو الرسالة (Message)
+    cid = m.message.chat.id if isinstance(m, types.CallbackQuery) else m.chat.id
+    uid = m.from_user.id
+    c_type = m.message.chat.type if isinstance(m, types.CallbackQuery) else m.chat.type
+
+    # 1️⃣ فحص نوع الدردشة (المنع من الخاص)
+    if c_type == 'private':
+        await m.answer("⚠️ الإذاعة العامة تعمل فقط داخل المجموعات المفعّلة.", show_alert=True)
+        return False
+
+    # 2️⃣ فحص تفعيل المجموعة (الشرط الأساسي)
+    try:
+        res_group = supabase.table("groups_hub").select("status").eq("group_id", cid).execute()
+        if not res_group.data or res_group.data[0]['status'] != 'active':
+            await m.answer("🚫 هذه المجموعة غير مفعّلة في نظام أثير. لا يمكن تشغيل المسابقات العامة هنا.", show_alert=True)
+            return False
+    except Exception as e:
+        logging.error(f"Error in Group Check: {e}")
+        return False
+
+    # 3️⃣ فحص الأهلية (مشرف أو خبير إجابات)
+    is_admin = False
+    try:
+        member = await bot.get_chat_member(cid, uid)
+        if member.status in ['creator', 'administrator']:
+            is_admin = True
+    except: pass
+
+    if is_admin:
+        return True # المشرف مسموح له دائماً في المجموعة المفعلة
+
+    # إذا لم يكن مشرفاً، نبحث في سجل الإجابات
+    try:
+        res_user = supabase.table("users_global_profile").select("correct_answers_count").eq("user_id", uid).execute()
+        if res_user.data:
+            ans_count = res_user.data[0].get('correct_answers_count', 0)
+            if ans_count >= 150:
+                return True # لاعب خبير مسموح له
+            else:
+                await m.answer(f"⚠️ عذراً! يجب أن تكون مشرفاً أو لديك 150 إجابة صحيحة (رصيدك: {ans_count}).", show_alert=True)
+                return False
+        else:
+            await m.answer("⚠️ لم يتم العثور على ملفك الشخصي. شارك في المسابقات أولاً!", show_alert=True)
+            return False
+    except Exception as e:
+        logging.error(f"Error in User Check: {e}")
+        return False
+        
+
 async def run_visual_countdown(group_msgs, kb, base_info):
     """دالة العد التنازلي البصري - آخر 10 ثوانٍ 🔥"""
     timer_emojis = ["🔟", "9️⃣", "8️⃣", "7️⃣", "6️⃣", "5️⃣", "4️⃣", "3️⃣", "2️⃣", "1️⃣"]
@@ -3733,7 +3786,7 @@ async def show_quizzes(obj):
 # ==========================================
 # [2] المحرك الأمني ولوحة التحكم (التشطيب النهائي المصلح)
 # ==========================================
-@dp.callback_query_handler(lambda c: c.data.startswith(('run_', 'close_', 'confirm_del_', 'final_del_', 'toggle_time_’, 'toggle_count_', 'edit_time_', 'manage_quiz_', 'quiz_settings_', 'set_c_', 'set_t_', 'toggle_speed_', 'toggle_scope_', 'toggle_hint_', 'toggle_style_', 'save_quiz_process_')), state="*")
+@dp.callback_query_handler(lambda c: c.data.startswith(('run_', 'close_', 'confirm_del_', 'final_del_', 'toggle_time_', 'toggle_count_', 'manage_quiz_', 'quiz_settings_', 'set_c_', 'set_t_', 'toggle_speed_', 'toggle_scope_', 'toggle_hint_', 'toggle_style_', 'save_quiz_process_')), state="*")
 async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
     try:
         data_parts = c.data.split('_')
@@ -3774,14 +3827,14 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             is_public = q.get('is_public', False)
 
             text = (
-                f"❃┏━━━━━ إعدادات: {q['quiz_name']} ━━━━━┓❃\n"
+                f"❃┏━ إعدادات: {q['quiz_name']} ━┓❃\n"
                 f"📊 عدد الاسئلة: `{q_count}`\n"
                 f"⏳ المهلة: `{q_time} ثانية`\n"
                 f"🎨 العرض: `{q_style}`\n"
                 f"🔖 النظام: `{q_mode}`\n"
                 f"📡 النطاق: `{'عام 🌐' if is_public else 'داخلي 📍'}`\n"
                 f"💡 التلميح: `{'مفعل ✅' if is_hint else 'معطل ❌'}`\n"
-                "❃┗━━━━━━━━━━━━━━━━━━━━┛❃"
+                "❃┗━━━━━━━━━━━━━━━┛❃"
             )
 
             kb = InlineKeyboardMarkup(row_width=2)
@@ -3793,7 +3846,6 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 # زر تدوير الوقت
                 InlineKeyboardButton(f"⏱️ الوقت: {q_time}ث", callback_data=f"toggle_time_{quiz_id}_{user_id}")
             )
-
             # زر تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
             kb.row(InlineKeyboardButton(f"🎨 العرض: {q_style}", callback_data=f"toggle_style_{quiz_id}_{user_id}"))
 
@@ -3814,15 +3866,12 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             await c.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
             return
 
-        # 3️⃣ محرك التبديلات المطور (تحديث 2026 - نظام التدوير)
+        # 3️⃣ محرك التبديلات المطور (نسخة الإصلاح النهائي 2026)
         elif any(c.data.startswith(x) for x in ['toggle_hint_', 'toggle_speed_', 'toggle_scope_', 'toggle_style_', 'toggle_count_', 'toggle_time_']):
-            # استخراج البيانات بدقة
-            data_parts = c.data.split('_')
             quiz_id = data_parts[2]
-            user_id = data_parts[3]
-
-            # 📊 [1] تدوير عدد الأسئلة (10 إلى 80)
-            if c.data.startswith('toggle_count_'):
+            
+            # 📊 تدوير عدد الأسئلة (10 إلى 80)
+            if 'toggle_count_' in c.data:
                 counts = [10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80]
                 res = supabase.table("saved_quizzes").select("questions_count").eq("id", quiz_id).single().execute()
                 curr = res.data.get('questions_count', 10)
@@ -3830,15 +3879,24 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 supabase.table("saved_quizzes").update({"questions_count": next_val}).eq("id", quiz_id).execute()
                 await c.answer(f"📊 الأسئلة: {next_val}")
 
-            # ⏱️ [2] تدوير الوقت (10 إلى 60)
-            elif c.data.startswith('toggle_time_'):
+            # ⏱️ تدوير الوقت (10 إلى 60)
+            elif 'toggle_time_' in c.data:
                 times = [10, 15, 20, 30, 45, 60]
                 res = supabase.table("saved_quizzes").select("time_limit").eq("id", quiz_id).single().execute()
                 curr = res.data.get('time_limit', 15)
                 next_val = times[(times.index(curr) + 1) % len(times)] if curr in times else 15
                 supabase.table("saved_quizzes").update({"time_limit": next_val}).eq("id", quiz_id).execute()
                 await c.answer(f"⏱️ الوقت: {next_val}ث")
-       
+
+            # 🎨 تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
+            elif 'toggle_style_' in c.data:
+                styles = ["اختيارات 📊", "مباشرة ⚡", "الكل 📋"]
+                res = supabase.table("saved_quizzes").select("quiz_style").eq("id", quiz_id).single().execute()
+                curr = res.data.get('quiz_style', "اختيارات 📊")
+                next_val = styles[(styles.index(curr) + 1) % len(styles)] if curr in styles else "اختيارات 📊"
+                supabase.table("saved_quizzes").update({"quiz_style": next_val}).eq("id", quiz_id).execute()
+                await c.answer(f"🎨 العرض: {next_val}")
+                                                    
             # 🎨 تدوير نمط العرض (اختيارات -> مباشرة -> الكل)
             elif 'toggle_style_' in c.data:
                 styles = ["اختيارات 📊", "مباشرة ⚡", "الكل 📋"]
@@ -3869,10 +3927,10 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 supabase.table("saved_quizzes").update({"mode": new_val}).eq("id", quiz_id).execute()
                 await c.answer(f"🔖 النظام: {new_val}")
 
-            # تحديث الواجهة تلقائياً
+            # 🔄 تحديث الواجهة فوراً (ليظهر الرقم الجديد في الزر)
             c.data = f"quiz_settings_{quiz_id}_{user_id}"
             return await handle_secure_actions(c, state)
-
+            
         # 4️⃣ الحفظ والعمليات النهائية (تبدأ من السطر 8 كما طلبت)
         elif c.data.startswith('save_quiz_process_'):
             quiz_id = data_parts[3] 
@@ -3896,11 +3954,11 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
             quiz_id = data_parts[2]
             supabase.table("saved_quizzes").delete().eq("id", quiz_id).execute()
             await c.answer("🗑️ تم الحذف بنجاح", show_alert=True)
-            c.data = f"show_quizzes_{user_id}"
+            c.data = f"list_my_quizzes_{user_id}"
             return await show_my_quizzes(c)
         
             # 2. العودة للقائمة: تغيير الداتا واستدعاء دالة العرض مباشرة
-            c.data = f"show_quizzes_{user_id}"
+            c.data = f"list_my_quizzes_{user_id}"
             return await show_my_quizzes(c) 
 
         # --- [ نظام تشغيل المسابقات: عامة أو خاصة ] ---
@@ -3921,9 +3979,17 @@ async def handle_secure_actions(c: types.CallbackQuery, state: FSMContext):
                 pass
 
             if q_data.get('is_public'):
-                # 🌐 مسار الإذاعة العامة
-                await c.answer("🌐 جاري إطلاق الإذاعة العامة للمجموعات...")
-                await start_broadcast_process(c, quiz_id, user_id)
+                # 🛡️ استدعاء نقطة التفتيش الأمنية
+                gate_passed = await security_checkpoint(c)
+                
+                if gate_passed:
+                    # 🌐 مسار الإذاعة العامة (فقط في حال نجاح التفتيش)
+                    await c.answer("🌐 جاري إطلاق الإذاعة العامة للمجموعات...")
+                    await start_broadcast_process(c, quiz_id, user_id)
+                else:
+                    # تم التعامل مع الرد داخل دالة الـ checkpoint
+                    return 
+                
             else:
                 # 📍 مسار التشغيل الخاص
                 if q_data.get('is_bot_quiz'):
