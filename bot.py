@@ -5146,7 +5146,6 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 
                 # 🛑 1. فحص الإيقاف الكلي (من الذاكرة المفتوحة - RAM)
                 # بدلاً من سؤال سوبابيس كل ثانيتين، نسأل الذاكرة: هل القاموس فرغ؟
-                global current_quiz_participants
                 if not current_quiz_participants:
                     logging.info("🛑 [رادار]: تم تصفير الذاكرة المفتوحة.. إيقاف الانتظار فوراً.")
                     break
@@ -5207,7 +5206,6 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             
             # 🔥 [ 1. الرادار الذكي: الاعتماد على الذاكرة المفتوحة ] 🔥
             # نفلتر القائمة لضمان أننا نرسل فقط لمن لم ينسحب ولم يُطرد من المسابقة
-            global current_quiz_participants
             current_active_ids = [
                 int(cid) for cid in chats_to_broadcast 
                 if str(cid) in current_quiz_participants and cid in active_quizzes
