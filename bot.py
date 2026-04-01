@@ -4586,7 +4586,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 try:
                     supabase.table("active_quizzes").update({
                         "current_answer": ans,
-                        quiz_style": current_style,
+                        "quiz_style": current_style,
                         "current_index": i + 1,
                         "question_category_name": cat_name, # 👈 يظهر الآن (تاريخ، جغرافيا..)
                         "is_active": True,
