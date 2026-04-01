@@ -5185,40 +5185,41 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     results_to_delete[all_chats[idx]].append(rm.message_id)
             
             # 7️⃣ العداد التنازلي والمزامنة للجولة القادمة (تأمين المسار 🛡️)
+            # 7️⃣ العداد التنازلي للسؤال القادم (خطة الاستمرارية 🛡️)
             if i < total_q - 1:
-                # 🛑 فحص أمان: هل لا يزال هناك مشاركين؟
-                if not current_quiz_participants: 
-                    logging.warning("⚠️ توقف المسابقة: لا يوجد مشاركين للسؤال القادم.")
-                    break
+                # 🚨 [ رادار الطوارئ ]: إذا القائمة فارغة، نحاول إنعاشها من القائمة الأصلية
+                if not current_quiz_participants:
+                    logging.warning("⚠️ تحذير: الذاكرة فارغة! محاولة إنعاش المجموعات الأصلية...")
+                    current_quiz_participants = {str(cid): True for cid in chats_to_broadcast}
 
-                # 🔥 [ إعادة توليد الأيديات النشطة ] لضمان عدم حدوث NameError
+                # إعادة توليد الأيديات النشطة لضمان "النبض"
                 current_active_ids = [
                     int(cid) for cid in chats_to_broadcast 
                     if str(cid) in current_quiz_participants and cid in active_quizzes
                 ]
 
-                # إذا لم نجد مجموعات نشطة، ننتظر قليلاً بدل الـ break القاتل
+                # 🛑 إذا لا تزال فارغة، هنا فعلاً نضطر للتوقف
                 if not current_active_ids:
-                    await asyncio.sleep(1)
-                    # هنا يمكنك اختيار الاستمرار أو الكسر حسب رغبتك
-                    # continue 
+                    logging.error("❌ فشل الإنعاش: لا توجد مجموعات نشطة نهائياً. كسر المسابقة.")
+                    break
 
-                # 🧹 تطهير الرام وتجهيزه للجولة التالية (تصفير العدادات)
+                # 🧹 تطهير الرام وتجهيزه للجولة التالية
                 for cid in current_active_ids:
                     if cid in active_quizzes:
-                        active_quizzes[cid]['winners'] = []
-                        active_quizzes[cid]['losers'] = []
-                        active_quizzes[cid]['question_finished'] = False
-                        active_quizzes[cid]['active'] = True 
+                        active_quizzes[cid].update({
+                            'winners': [],
+                            'losers': [],
+                            'question_finished': False,
+                            'active': True
+                        })
 
-                # ⏰ انطلاق عداد "السؤال القادم" المتزامن
-                # استخدمنا return_exceptions لضمان أن فشل مجموعة لا يوقف البقية
+                # ⏰ انطلاق العدادات (تزامن ملكي)
                 count_tasks = [run_countdown(cid) for cid in current_active_ids]
                 if count_tasks:
-                    await asyncio.gather(*count_tasks, return_exceptions=True)                                                    
+                    await asyncio.gather(*count_tasks, return_exceptions=True)
             else:
-                # نهاية المسابقة الملكية
-                await asyncio.sleep(1)
+                logging.info("🏁 وصلنا لخط النهاية بسلام.")
+
 
         # 🏁 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
         
