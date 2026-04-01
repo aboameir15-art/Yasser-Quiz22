@@ -5053,23 +5053,31 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         active_quizzes[cid]['last_poll_id'] = m.message_id
 
             # 5️⃣ [ محرك الانتظار الموحد ]
+            # 5️⃣ [ محرك الانتظار الذكي ]
             t_limit = int(quiz_data.get('time_limit', 15))
             start_wait = time.time()
             
-            # حلقة مراقبة ذكية (تنتظر حتى انتهاء الوقت أو إجابة الجميع)
+            # 🔥 الحل: تعريف القائمة هنا أولاً
+            active_chats = [cid for cid in chats_to_broadcast if str(cid) in current_quiz_participants and cid in active_quizzes]
+
             while time.time() - start_wait < t_limit:
-                # التحقق هل لا يزال هناك أي مجموعة نشطة؟
-                 # فحص هل قام أي بطل في أي مجموعة بكتابة الإجابة الصحيحة؟
+                # تحديث القائمة داخل اللوب لضمان "النبض" المستمر
+                active_chats = [cid for cid in chats_to_broadcast if str(cid) in current_quiz_participants and cid in active_quizzes]
+                
+                if not active_chats:
+                    await asyncio.sleep(0.5)
+                    continue # استمر ولا تعمل break عشان ما يموت المحرك
+
+                # الآن السطر هذا سيعمل لأن active_chats معرفة
                 is_answered = any(active_quizzes.get(c, {}).get('question_finished') for c in active_chats)
                 
                 if is_answered:
                     logging.info("⚡ [سرعة]: تم حسم السؤال! كسر حلقة الانتظار.")
                     break              
                 
-                # تقليل النوم لـ 0.05 لضمان حساسية عالية جداً
                 await asyncio.sleep(0.1)
 
-
+            # استكمال العمل بالـ final_active كما في كودك القديم
             final_active = [cid for cid in chats_to_broadcast if str(cid) in current_quiz_participants]
             
             for cid in final_active:
