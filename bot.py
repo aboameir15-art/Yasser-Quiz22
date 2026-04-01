@@ -5091,10 +5091,15 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     "quiz_type": "public"
                 })
 
-            # 4️⃣ [ مزامنة السحاب في الخلفية - لا لتعطيل البث ]
+            # 4️⃣ [ مزامنة السحاب النهائية للسؤال الحالي ]
             if current_quiz_db_id:
-                # استخدمنا create_task لكي نحدث سوبابيس "في الظل" بينما البوت يرسل السؤال فعلياً
-                asyncio.create_task(supabase.table("active_quizzes").update(sync_data).eq("id", current_quiz_db_id).execute())
+                try:
+                    # تم الحذف: asyncio.create_task 
+                    # التحديث يتم الآن مباشرة لأن مكتبة سوبابيس لا تدعم المهام الخلفية هنا
+                    supabase.table("active_quizzes").update(sync_data).eq("id", current_quiz_db_id).execute()
+                    logging.info(f"☁️ [سحاب]: تم تحديث بيانات السؤال {i+1} بنجاح.")
+                except Exception as up_err:
+                    logging.error(f"⚠️ فشل تحديث سجل سوبابيس: {up_err}")
 
             # --- [ تجهيز التلميح الذكي ] ---
             normal_hint_str = ""
