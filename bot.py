@@ -4880,90 +4880,79 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
 
             # فاصل زمني بين الأسئلة لراحة المستخدمين (3 ثوانٍ)
             await asyncio.sleep(2)
-  
-            # (اختياري) عداد تنازلي هنا للسؤال التالي
+              
             # 7️⃣ [ العداد التنازلي البصري للسؤال القادم ]
-        if i < total_q - 1:
-            # تصفير حالة الفائزين في الرام استعداداً للنبضة القادمة
-            for cid in chats_to_broadcast:
-                if cid in active_quizzes:
-                    active_quizzes[cid]['winners'] = []
-            
-            # تشغيل العداد التنازلي في كل المجموعات (متوازي لسرعة الأداء)
-            count_tasks = [run_countdown(cid) for cid in chats_to_broadcast]
-            await asyncio.gather(*count_tasks, return_exceptions=True)
-        else:
-            # آخر سؤال.. استراحة بسيطة قبل إعلان البطل الأكبر
-            await asyncio.sleep(2)
+            if i < total_q - 1:
+                # تصفير حالة الفائزين في الرام استعداداً للنبضة القادمة
+                for cid in chats_to_broadcast:
+                    if cid in active_quizzes:
+                        active_quizzes[cid]['winners'] = []
+                
+                # تشغيل العداد التنازلي في كل المجموعات (متوازي لسرعة الأداء)
+                count_tasks = [run_countdown(cid) for cid in chats_to_broadcast]
+                await asyncio.gather(*count_tasks, return_exceptions=True)
+            else:
+                # آخر سؤال.. استراحة بسيطة قبل إعلان البطل الأكبر
+                await asyncio.sleep(2)
 
-    # 🏁 [ الخروج من حلقة الأسئلة - مرحلة التتويج النهائي ] 🏁
-    
-    # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
-    for cid in chats_to_broadcast:
-        try: 
-            # أ. إرسال لوحة النتائج النهائية للمجموعة (The Hall of Fame)
-            await send_broadcast_final_results(
-                chat_id=cid, 
-                scores=group_scores, 
-                total_q=total_q, 
-                group_names=group_names_map
-            )
-            # ب. تنظيف الرام المحلي لهذه المجموعة
-            if cid in active_quizzes:
-                active_quizzes[cid]['active'] = False
-            
-            await asyncio.sleep(0.3) # نفس بسيط للبوت بين المجموعات
-        except Exception as e: 
-            logging.error(f"🚨 خطأ في إرسال النتائج النهائية لـ {cid}: {e}")
+        # 🏁 [ الخروج من حلقة الأسئلة - مرحلة التتويج النهائي ] 🏁
 
-    # 🧹 [ نظام الحماية من الـ Flood - تنظيف الشات ]
-    # نحذف رسائل الأسئلة والنتائج المؤقتة لنترك المجموعة نظيفة
-    for cid in chats_to_broadcast:
-        all_mids = messages_to_delete.get(cid, []) + results_to_delete.get(cid, [])
-        for idx, mid in enumerate(all_mids):
+        # 8️⃣ النتائج النهائية والتنظيف الرقمي المبرد ❄️
+        for cid in chats_to_broadcast:
             try: 
-                await bot.delete_message(cid, mid)
-                # ذكاء التنظيف: كل 5 رسائل ننتظر ثانية عشان تلجرام ما يعطينا Error 429
-                if idx % 5 == 0: await asyncio.sleep(1)
-            except: pass
+                # أ. إرسال لوحة النتائج النهائية للمجموعة (The Hall of Fame)
+                await send_broadcast_final_results(
+                    chat_id=cid, 
+                    scores=group_scores, 
+                    total_q=total_q, 
+                    group_names=group_names_map
+                )
+                # ب. تنظيف الرام المحلي لهذه المجموعة
+                if cid in active_quizzes:
+                    active_quizzes[cid]['active'] = False
+                
+                await asyncio.sleep(0.3) 
+            except Exception as e: 
+                logging.error(f"🚨 خطأ في إرسال النتائج النهائية لـ {cid}: {e}")
 
-    # 🚀 [ الخطوة الجوهرية: ترحيل "الحصاد" لسوبابيس ] 🚀
-    try:
-        if current_quiz_db_id:
-            logging.info(f"📊 جاري جرد المسابقة {current_quiz_db_id} والترحيل العالمي...")
-            
-            # 1. المزامنة العالمية (نعتمد على سجل الإجابات answers_log في سوبابيس)
-            # نمرر قاموس فارغ لأن الدالة ستعتمد على الـ quiz_id للجلب من السجل مباشرة
-            await sync_points_to_global_db(
-                group_scores={}, 
-                quiz_id=current_quiz_db_id, 
-                cat_name=main_cat_name
-            )
+        # 🧹 [ نظام الحماية من الـ Flood - تنظيف الشات ]
+        for cid in chats_to_broadcast:
+            all_mids = messages_to_delete.get(cid, []) + results_to_delete.get(cid, [])
+            for idx, mid in enumerate(all_mids):
+                try: 
+                    await bot.delete_message(cid, mid)
+                    if idx % 5 == 0: await asyncio.sleep(1)
+                except: pass
 
-            # 2. التطهير النهائي لقاعدة البيانات (Database Purge)
-            # ننتظر قليلاً للتأكد من انتهاء كل عمليات الـ Insert السابقة
-            await asyncio.sleep(3)
-            
-            # حذف سجل المسابقة النشطة (بسبب الـ CASCADE سيتم حذف المشاركين واللوج المرتبط بها)
-            supabase.table("active_quizzes").delete().eq("id", current_quiz_db_id).execute()
-            logging.info(f"🧹 تم تطهير النظام بالكامل. المسابقة {current_quiz_db_id} أصبحت تاريخاً!")
+        # 🚀 [ الخطوة الجوهرية: ترحيل الحصاد لسوبابيس ]
+        try:
+            if current_quiz_db_id:
+                logging.info(f"📊 جاري جرد المسابقة {current_quiz_db_id} والترحيل العالمي...")
+                await sync_points_to_global_db(
+                    group_scores={}, 
+                    quiz_id=current_quiz_db_id, 
+                    cat_name=main_cat_name
+                )
+                await asyncio.sleep(3)
+                supabase.table("active_quizzes").delete().eq("id", current_quiz_db_id).execute()
+                logging.info(f"🧹 تم تطهير النظام بالكامل للمسابقة {current_quiz_db_id}")
+        except Exception as sync_err:
+            logging.error(f"🚨 خطأ أثناء الترحيل أو التنظيف النهائي: {sync_err}")
 
-    except Exception as sync_err:
-        logging.error(f"🚨 خطأ أثناء الترحيل أو التنظيف النهائي: {sync_err}")
+    except Exception as fatal_e:
+        logging.error(f"🚨 [المحرك العالمي]: خطأ قاتل غير متوقع: {fatal_e}")
 
-except Exception as fatal_e:
-    logging.error(f"🚨 [المحرك العالمي]: خطأ قاتل غير متوقع: {fatal_e}")
+    finally:
+        # 🔓 [ فك الحظر ]: هذا الفراغ 4 لضمان التنفيذ دائماً وعدم تعليق المحرك
+        for cid in all_chats:
+            active_broadcasts.discard(cid)
+            # مسح الجلسة من الرام المفتوح تماماً
+            if cid in active_competition_sessions:
+                del active_competition_sessions[cid]
+        
+        logging.info("🏁 البروتوكول الملكي اكتمل. الرادار الآن جاهز لمهمة جديدة.")
+        
 
-finally:
-    # 🔓 [ فك الحظر ]: السماح للمجموعات ببدء مسابقات جديدة
-    for cid in all_chats:
-        active_broadcasts.discard(cid)
-        # مسح الجلسة من الرام المفتوح تماماً
-        if cid in active_competition_sessions:
-            del active_competition_sessions[cid]
-    
-    logging.info("🏁 البروتوكول الملكي اكتمل. الرادار الآن جاهز لمهمة جديدة.")
-    
 # =======================================
 # --- [ بداية الدالة من العمود 0 لضمان عدم وجود SyntaxError ] ---
 import re
