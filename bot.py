@@ -4895,6 +4895,9 @@ async def run_countdown(chat_id):
 
 # 3️⃣ المحرك الرئيسي الموحد (نسخة ياسر المطورة 2026)
 async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_db_id=None):
+    # 🛑 [ أول سطر: استدعاء الذاكرة المفتوحة للعمل داخل الدالة ] 🛑
+    global current_quiz_participants
+
     # 1. [ المندوب سلم القائمة ]
     input_ids = chat_ids if isinstance(chat_ids, list) else [chat_ids]
     all_chats = list(set(input_ids))
@@ -5013,12 +5016,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
             if quiz_entry.data:
                 current_quiz_db_id = quiz_entry.data[0]['id']
                 logging.info(f"✅ سجل المسابقة جاهز ID: {current_quiz_db_id}")
-
-                # 🔥 [ 2. تفعيل الذاكرة المفتوحة - RAM ] 🔥
-                # نجعل المجموعات قابلة للوصول إليها من أي مكان في البوت فوراً
-                global current_quiz_participants
-                current_quiz_participants = {} 
-
+                
                 for cid in chats_to_broadcast:
                     # نجهز لكل مجموعة "ملف نشاط" داخل الذاكرة
                     current_quiz_participants[str(cid)] = {
