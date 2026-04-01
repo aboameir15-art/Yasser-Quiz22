@@ -5037,12 +5037,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
         # --- [ داخل دورة البث الموحدة ] ---
         # --- [ داخل دورة البث الموحدة - نسخة الإعصار ⚡ ] ---
         for i, q in enumerate(selected_questions):
-            
-            # 🔥 [ 1. رادار الذاكرة المفتوحة - الاستجابة اللحظية ] 🔥
-            # لم نعد نسأل سوبابيس هنا! نسأل القاموس العالمي current_quiz_participants
-            # أي مجموعة انسحبت أو أوقفت المسابقة ستطير من القاموس فوراً
-            global current_quiz_participants
-            
+
             # تحديث قائمة البث بناءً على "الأحياء" فقط في الذاكرة المفتوحة
             chats_to_broadcast = [int(cid) for cid in current_quiz_participants.keys() if current_quiz_participants[cid]['status'] == 'playing']
 
