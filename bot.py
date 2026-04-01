@@ -4956,7 +4956,7 @@ def is_answer_correct(user_msg, correct_ans):
                 if len(c) < 3: continue
                 c_subs = [c[i:i+3] for i in range(len(c)-2)]
                 match_count = sum(1 for us in u_subs if any(
-                    difflib.SequenceMatcher(None, us, cs).ratio() >= 0.85 for cs in c_subs
+                    difflib.SequenceMatcher(None, us, cs).ratio() >= 0.50 for cs in c_subs
                 ))
                 if match_count / max(len(c_subs), 1) > 0.6:
                     return True
@@ -5119,101 +5119,95 @@ async def handle_poll_answer(poll_answer: types.PollAnswer):
     user_name = poll_answer.user.full_name
     poll_id = poll_answer.poll_id
     
-    # 1. جلب بيانات السؤال من المخزن السريع
+    # 1. جلب بيانات السؤال من المخزن السريع (active_polls)
     poll_info = active_polls.get(poll_id)
     if not poll_info:
         return
 
-    # 🛑 [ حماية الغش: منع الإجابة المتعددة في مجموعات مختلفة ]
-    # نستخدم i (رقم السؤال الحالي) للتأكد أن المستخدم لم يجاوب عليه مسبقاً عالمياً
+    cid = poll_info.get('chat_id')
+    db_quiz_id = poll_info.get('db_quiz_id') # هذا هو ID المسابقة في سوبابيس
     q_index = poll_info.get('current_num')
-    
-    # نتحقق من القائمة العالمية للمجاوبين (answered_users_global)
+
+    # 🛑 [ حماية الغش: منع الإجابة المتعددة ]
     if q_index in answered_users_global and user_id in answered_users_global[q_index]:
-        # إذا وجدناه، يعني أنه جاوب في مجموعة أخرى.. ننهي العملية بصمت
-        print(f"🚫 [محاولة غش]: {user_name} حاول الإجابة مرة أخرى في مجموعة مختلفة!")
+        print(f"🚫 [محاولة غش]: {user_name} حاول الإجابة مرة أخرى!")
         return
 
-    # 2. التحقق من الإجابة
+    # 2. التحقق من الإجابة وحساب الوقت
     user_option_id = poll_answer.option_ids[0] 
     is_correct = (user_option_id == poll_info['correct_id'])
-
-    # 3. حساب وقت الاستجابة
     response_time = (datetime.now() - poll_info['start_time']).total_seconds()
+    t = float(response_time)
 
-    # 4. تسجيل المستخدم في "قائمة المجاوبين العالمية" للسؤال الحالي فوراً
+    # 3. تسجيل في القائمة العالمية فوراً
     if q_index not in answered_users_global:
         answered_users_global[q_index] = []
     answered_users_global[q_index].append(user_id)
 
-    # 5. حساب النقاط والألقاب (محور السرعة)
-    t = float(response_time)
+    # 4. حساب النقاط والألقاب
     if is_correct:
-        if t < 3.0:
-            s_title, extra_pts = "⚡ (خارق الصمت)", 100
-        elif t < 4.0:
-            s_title, extra_pts = "🚀 (القناص السريع)", 70
-        elif t < 6.0:
-            s_title, extra_pts = "🏹 (المتمكن)", 20
-        else:
-            s_title, extra_pts = "🧠 (الذكي)", 0
+        if t < 2.5: s_title, extra_pts = "⚡ (خارق الصمت)", 100
+        elif t < 4.0: s_title, extra_pts = "🚀 (القناص السريع)", 60
+        elif t < 6.0: s_title, extra_pts = "🏹 (المتمكن)", 30
+        else: s_title, extra_pts = "🧠 (الذكي)", 0
         total_pts = 10 + extra_pts
     else:
         s_title, total_pts = "", 0
 
-    # 6. تجهيز بيانات الإدراج لجدول answers_log
+    # 5. [ الربط الموحد مع الرام وسوبابيس ] 🔥
+    if cid in active_quizzes:
+        # أ: تحديث الرام المحلي (الموحد)
+        if is_correct:
+            winner_entry = {
+                'id': user_id,
+                'name': user_name,
+                'time': round(t, 3),
+                'title': s_title,
+                'pts': total_pts
+            }
+            active_quizzes[cid]['winners'].append(winner_entry)
+            
+            # ب: مزامنة قائمة الفائزين مع سوبابيس (voter_list)
+            # نرسل القائمة كاملة للسحاب ليراها المشرف لحظياً
+            try:
+                if db_quiz_id:
+                    supabase.table("active_quizzes").update({
+                        "voter_list": active_quizzes[cid]['winners'],
+                        "user_choices": {str(user_id): user_option_id}
+                    }).eq("id", db_quiz_id).execute()
+            except Exception as e:
+                logging.error(f"⚠️ فشل تحديث رادار سوبابيس: {e}")
+        else:
+            # تسجيل الخاسرين محلياً (التشطيب الملكي)
+            if 'losers' not in active_quizzes[cid]:
+                active_quizzes[cid]['losers'] = []
+            active_quizzes[cid]['losers'].append({'id': user_id, 'name': user_name, 'penalty': 5})
+
+    # 6. تجهيز بيانات الإدراج لجدول answers_log (السجل التاريخي)
     answer_data = {
-        "quiz_id": poll_info.get('db_quiz_id'),
-        "quiz_type": "public",
-        "category_name": poll_info.get('category'),
-        "chat_id": poll_info.get('chat_id'),
+        "quiz_id": db_quiz_id,
+        "quiz_type": poll_info.get('quiz_type', 'private'), 
+        "quiz_style": "اختيارات 📊",
+        "category_name": poll_info.get('category', 'عام'),
+        "chat_id": cid,
         "user_id": user_id,
-        "group_name": m.chat.title,
         "user_name": user_name,
         "is_correct": is_correct,
         "points_earned": total_pts,
         "question_no": q_index,
-        "response_time": t, # تسجيل الوقت للدقة
-        "total_quiz_questions": poll_info.get('total_num'),
-        "answer_text": poll_info.get('correct_text') if is_correct else "خاطئة",
+        "total_quiz_questions": poll_info.get('total_num'),    
+        "answer_text": poll_info.get('correct_text') if is_correct else "إجابة خاطئة",
+        "response_time": round(t, 3),
         "created_at": "now()"
     }
 
-    # 🚀 تسجيل في سوبابيس
+    # 🚀 تسجيل العملية في سجل الإجابات
     await record_poll_answer_in_db(answer_data)
 
-    # 🔥 ربط التصويت بالرادار المحلي (للعرض المباشر)
-    cid = poll_info.get('chat_id')
-    
-    if cid in active_quizzes:
-        if is_correct:
-            # 1️⃣ إضافة الأبطال للرادار المحلي
-            active_quizzes[cid]['winners'].append({
-                'id': user_id,
-                'name': user_name,
-                'time': t,          # الوقت الحقيقي
-                'title': s_title,   # اللقب المستحق (خارق الصمت، القناص، إلخ)
-                'pts': total_pts    # إجمالي النقاط المكتسبة
-            })
-        else:
-            # 2️⃣ إضافة المخطئين للرادار المحلي (التشطيب الملكي)
-            # نضمن وجود قائمة losers في القاموس أولاً
-            if 'losers' not in active_quizzes[cid]:
-                active_quizzes[cid]['losers'] = []
-                
-            active_quizzes[cid]['losers'].append({
-                'id': user_id,
-                'name': user_name,
-                'penalty': 5  # قيمة الخصم التي ستظهر في القالب الملكي
-            })
+    # 📡 طباعة للرصد
+    status = f"✅ كفو (+{total_pts}ن)" if is_correct else "❌ أخطأ (-5ن)"
+    print(f"📡 [رصد]: {user_name} | {status} | الوقت: {t:.2f}ث")
 
-    # 6. [قرح جو]: طباعة سريعة للرصد (للمطور في التيرمنال)
-    if is_correct:
-        status = f"✅ كفو أصاب (+{total_pts}ن)"
-    else:
-        status = "❌ أخطأ (-5ن)"
-        
-    print(f"📡 [رصد]: {user_name} | {status} | الوقت: {response_time:.2f} ثانية")
 # ============================================================
 # 1. إعداد حالات الإدارة - Admin States
 # ============================================================
