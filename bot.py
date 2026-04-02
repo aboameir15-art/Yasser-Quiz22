@@ -4825,6 +4825,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                         active_quizzes[cid]['last_poll_id'] = m.message_id
 
             # --- [ ز ] محرك الانتظار الذكي (Smart Wait) ---
+            t_limit = int(quiz_data.get('time_limit', 15))
             start_wait = time.time()
             while time.time() - start_wait < t_limit:
                 # فحص: هل لا تزال هناك أي مجموعة تنتظر إجابات؟
@@ -4832,7 +4833,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 if not still_active:
                     logging.info(f"⚡ [رادار]: الجميع أجاب في السؤال {q_index}.. تسريع النتائج.")
                     break
-                await asyncio.sleep(0.1) # حساسية عالية للوقت
+                await asyncio.sleep(0.08) # حساسية عالية للوقت
 
             # 🛑 [ الضربة القاضية ]: إغلاق جميع الاستطلاعات فوراً
             if current_style == 'اختيارات 📊':
