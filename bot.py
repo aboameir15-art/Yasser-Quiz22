@@ -4269,10 +4269,13 @@ async def delete_after(message, delay):
 # [2] المحرك الموحد (نسخة التشطيب الرسمي @QuizBot + العداد المطور)
 # ==========================================
 async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_type):
+    # 0️⃣ [ التعريفات الذهبية ] - استخراج الهوية فوراً لمنع خطأ NameError
+    creator_id = quiz_data.get('owner_id') or quiz_data.get('created_by') or 0
+    
     random.shuffle(questions)
     overall_scores = {}
     
-    # 1️⃣ [ التسجيل الرسمي ] - إنشاء سجل المسابقة في سوبابيس وحجز ID
+    # 1️⃣ [ التسجيل الرسمي ] - إنشاء سجل المسابقة وحجز ID
     current_quiz_id = None
     try:
         sample_q = questions[0]
@@ -4283,14 +4286,15 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         else:
             main_cat = "قسم خاص"
 
+        # تسجيل المسابقة في سوبابيس باستخدام creator_id الذي عرفناه بالأعلى
         quiz_reg = supabase.table("active_quizzes").insert({
             "chat_id": chat_id,
             "quiz_name": f"مسابقة {owner_name}",
-            "created_by": quiz_data.get('owner_id', 0),
+            "created_by": creator_id,         # ✅ تم الإصلاح
             "is_global": (engine_type == "bot"),
             "is_active": True,
             "category_name": main_cat,
-            "quiz_owner_id": creator_id,
+            "quiz_owner_id": creator_id,      # ✅ الآن المتغير معروف للدالة
             "quiz_owner_name": owner_name,
             "quiz_type": "private" 
         }).execute()
@@ -4298,8 +4302,10 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
         if quiz_reg.data:
             current_quiz_id = quiz_reg.data[0]['id']
             logging.info(f"✅ تم حجز ID بنجاح: {current_quiz_id}")
+            
     except Exception as e:
-        logging.error(f"❌ فشل تسجيل المسابقة: {e}")
+        logging.error(f"❌ فشل تسجيل المسابقة في سوبابيس: {e}")
+
 
     questions_to_delete = []
     results_to_delete = []
