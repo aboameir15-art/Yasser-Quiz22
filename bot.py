@@ -210,6 +210,7 @@ async def send_quiz_master(chat_id, q_data, current_num, total_num, settings, al
     except Exception as e:
         print(f"❌ Error in Master Engine: {e}")
         return await send_quiz_question(chat_id, q_data, current_num, total_num, settings)
+
 # ==========================================
 # --- [ دالة تسجيل الإجابة في سوبابيس المحدثة ] ---
 # ==========================================
@@ -235,20 +236,19 @@ async def record_poll_answer_in_db(answer_data):
         print(f"❌ فشل تسجيل الإجابة في answers_log: {e}")
 
 # ==========================================
-# ==========================================
-# --- [دالة مساعدة لتوحيد النصوص ] ---
+# --- [ دالة تسجيل الإجابة في سوبابيس المحدثة ] ---
 # ==========================================
 def normalize_arabic(text):
     if not text: return ""
     text = str(text).strip()
-    # توحيد الألفات، التاء المربوطة، الياء، وحذف التشكيل
     text = re.sub(r'[أإآ]', 'ا', text)
     text = re.sub(r'ة', 'ه', text)
     text = re.sub(r'ى', 'ي', text)
     text = re.sub(r'[\u064B-\u0652]', '', text)
     return text
+
 # ==========================================
-# --- [ المحرك الخارق: الرادار الذكي والقوافي ] ---
+# --- [ مغناطيس أثير الملكي: الدقة المطلقة 2026 ] ---
 # ==========================================
 async def get_ultra_smart_options(question_text, category_name, correct_ans):
     try:
@@ -256,157 +256,104 @@ async def get_ultra_smart_options(question_text, category_name, correct_ans):
         fakes = []
         seen_norms = {norm_correct}
         
-        ans_words = correct_ans.split()
-        q_norm = normalize_arabic(question_text)
-
-        # 1️⃣ [ مصفوفة الموسوعة العالمية الشاملة - الإصدار النهائي المطلق 2026 ] 🌐
-        # تم تصميمها لامتصاص كل أنواع الأسئلة على وجه الأرض مع معالجة (هـ / ة)
-        patterns = {
-            # --- التاريخ والزمن والحروب ---
-            'history_war': [
-                'عام', 'سنه', 'سنة', 'تاريخ', 'قرن', 'ميلادي', 'هجري', 'معركه', 'معركة', 
-                'غزوه', 'غزوة', 'ثوره', 'ثورة', 'حضاره', 'حضارة', 'امبراطور', 'ملك', 'سلالة', 'عصر'
-            ],
-            
-            # --- الجغرافيا والكون والطبيعة ---
-            'geography_world': [
-                'دوله', 'دولة', 'بلد', 'عاصمه', 'عاصمة', 'مدينه', 'مدينة', 'نهر', 'بحر', 
-                'محيط', 'جبل', 'قاره', 'قارة', 'جزيره', 'جزيرة', 'خليج', 'مضيق', 'مناخ', 'تضاريس', 'غابة'
-            ],
-            
-            # --- العلوم والتقنية والطب (التشريح الدقيق) ---
-            'science_tech': [
-                'كوكب', 'عنصر', 'غاز', 'حيوان', 'طائر', 'نبات', 'جسم', 'خليه', 'خلية', 
-                'جهاز', 'مخترع', 'اكتشف', 'فيزياء', 'كيمياء', 'مجره', 'مجرة', 'فضاء', 'تلسكوب', 'هندسة'
-            ],
-            'medical_health': [
-                'عضو', 'مرض', 'دواء', 'فيتامين', 'هرمون', 'عصب', 'عظم', 'دم', 'قلب', 
-                'دماغ', 'عضله', 'عضلة', 'غده', 'غدة', 'فيروس', 'بكتيريا', 'علاج'
-            ],
-            
-            # --- الفكر والأدب والشخصيات ---
-            'humanities': [
-                'من هو', 'الشاعر', 'مؤلف', 'كاتب', 'فنان', 'رسام', 'فيلسوف', 'رواية', 
-                'قصيدة', 'لوحة', 'تمثال', 'مسرحية', 'فكر', 'منطق', 'ثقافة'
-            ],
-            'islamic_religion': [
-                'سوره', 'سورة', 'آيه', 'آية', 'نبي', 'رسول', 'الصحابي', 'تابعي', 'فقيه', 
-                'كتاب', 'تفسير', 'حديث', 'صلاه', 'صلاة', 'حج', 'زكاه', 'زكاة', 'غزوة'
-            ],
-            
-            # --- الرياضة والترفيه والألعاب ---
-            'sports_ent': [
-                'لاعب', 'نادي', 'منتخب', 'بطوله', 'بطولة', 'كاس', 'كأس', 'ملعب', 'هدف', 
-                'اولمبياد', 'فيلم', 'مسلسل', 'ممثل', 'مخرج', 'اغنية', 'اغنيه', 'رقم قياسي'
-            ],
-            
-            # --- الحساب والمنطق والقياسات ---
-            'math_logic': [
-                'حساب', 'رياضيات', 'مربع', 'مثلث', 'زاويه', 'زاوية', 'مجموع', 'ناتج', 
-                'معادله', 'معادلة', 'رقم', 'ضعف', 'جذر', 'قسمة', 'ضرب'
-            ],
-            'measurements': [
-                'كم عدد', 'كم يبلغ', 'ما طول', 'ما وزن', 'نسبه', 'نسبة', 'مسافه', 'مسافة', 
-                'الوحده', 'الوحدة', 'لقياس', 'مادة', 'مادة', 'الزمن', 'سرعه', 'سرعة', 'درجه', 'درجة'
-            ],
-            
-            # --- الاقتصاد، القانون، والسياسة ---
-            'eco_law_pol': [
-                'عملة', 'عمله', 'بورصة', 'اقتصاد', 'شركة', 'شركه', 'قانون', 'محكمة', 
-                'دستور', 'رئيس', 'وزير', 'برلمان', 'انتخابات', 'سياسة'
-            ],
-
-            # --- اللغة، الأمثال، الحياة اليومية ---
-            'language_proverbs': [
-                'مرادف', 'ضد', 'معنى', 'جمع', 'مفرد', 'مثل', 'حكمه', 'حكمة', 'قائل', 
-                'كلمة', 'كلمه', 'لغة', 'لغه', 'لهجة', 'لهجه'
-            ],
-            'lifestyle_brands': [
-                'اكله', 'اكلة', 'وجبه', 'وجبة', 'مطبخ', 'فاكهه', 'فاكهة', 'خضار', 
-                'سياره', 'سيارة', 'ماركه', 'ماركة', 'شعار', 'هاتف', 'تطبيق', 'برج'
-            ],
-            
-            # --- الأساطير والماورائيات ---
-            'myth_folklore': [
-                'اسطورة', 'اسطوره', 'خرافة', 'خرافه', 'اله', 'عملاق', 'تنين', 'فلكلور'
-            ]
-        }
+        # 1️⃣ [ استخراج الجوهر - The Core Extraction ]
+        # قائمة أدوات الاستفهام والكلمات الزائدة التي تعمي المحرك العادي
+        question_tools = [
+            'ما', 'ماذا', 'من', 'متى', 'اين', 'أين', 'كيف', 'كم', 'هل', 'اي', 'أي', 
+            'لماذا', 'ماهي', 'ماهو', 'منهو', 'اذكر', 'اسم', 'يسمى', 'تسمى', 'تعتبر', 
+            'يعتبر', 'يبلغ', 'تبلغ', 'عدد', 'هي', 'هو', 'في', 'على', 'عن', 'الذي', 'التي'
+        ]
         
-        detected_pattern = None
-        for key, words in patterns.items():
-            if any(w in q_norm for w in words):
-                detected_pattern = key
+        # تنظيف السؤال وتقطيعه
+        q_words = [w for w in question_text.split() if normalize_arabic(w) not in question_tools]
+        
+        # اقتناص "الكلمة الجوهرية" (Entity):
+        # نبحث عن أول كلمة تبدأ بـ "ال" بعد أدوات الاستفهام، فهي غالباً (الدولة، النهر، المدينة، الغدة..)
+        core_entity = None
+        for w in q_words:
+            if w.startswith('ال') and len(w) > 3:
+                core_entity = re.sub(r'^ال', '', w) # نحذف "ال" ليكون البحث مرناً (دولة = الدولة)
                 break
+        
+        # إذا لم نجد كلمة بـ "ال"، نأخذ أول كلمة قوية متبقية
+        if not core_entity and q_words:
+            core_entity = q_words[0]
 
-        # 2️⃣ نظام الصيد بالليزر (Strict Type Logic)
-        if detected_pattern:
-            search_keywords = patterns[detected_pattern]
-            # ذكاء اصطناعي مصغر: استخراج الكلمة النوعية مع إزالة الـ التعريف
-            specific_type = next((w for w in search_keywords if w in q_norm), None)
+        core_entity_norm = normalize_arabic(core_entity) if core_entity else ""
+
+        # 2️⃣ [ فلتر الخصائص - Type Casting ]
+        # هذا الفلتر يمنع خلط الزيت بالماء (الأرقام مع الحروف، الكلمات الطويلة مع القصيرة)
+        is_numeric_ans = any(char.isdigit() for char in correct_ans)
+        ans_word_count = len(correct_ans.split())
+        
+        # 3️⃣ [ الغوص الدقيق - Precision Deep Dive ]
+        query = supabase.table("bot_questions").select("correct_answer")
+        
+        # أ) إذا وجدنا "الكلمة الجوهرية" (مثال: وجدنا كلمة "دوله" أو "نهر")
+        if core_entity_norm:
+            # نبحث في الأسئلة التي تحتوي على نفس الكلمة الجوهرية (دول في دول، أنهار في أنهار)
+            # نستخدم .ilike للبحث المرن الذي يتجاهل الحركات
+            res_strict = query.ilike("question_content", f"%{core_entity_norm}%").limit(100).execute()
             
-            query = supabase.table("bot_questions").select("correct_answer")
-            
-            if specific_type:
-                # إزالة "ال" التعريف للبحث الشامل
-                clean_type = re.sub(r'^ال', '', specific_type)
-                res = query.ilike("question_content", f"%{clean_type}%").limit(60).execute()
-            else:
-                or_filter = ",".join([f"question_content.ilike.%{w}%" for w in search_keywords])
-                res = query.or_(or_filter).limit(60).execute()
-            
-            if res.data:
-                for r in res.data:
+            if res_strict.data:
+                for r in res_strict.data:
                     opt = str(r['correct_answer']).strip()
-                    if normalize_arabic(opt) not in seen_norms:
-                        # حماية الأرقام
-                        if any(char.isdigit() for char in correct_ans) and not any(char.isdigit() for char in opt):
-                            continue
-                        # تناسق الطول
-                        if abs(len(opt) - len(correct_ans)) <= 12:
+                    opt_norm = normalize_arabic(opt)
+                    
+                    if opt_norm not in seen_norms:
+                        # 🛡️ درع الزيت والماء (منع الخلط)
+                        if is_numeric_ans and not any(c.isdigit() for c in opt): continue
+                        if not is_numeric_ans and any(c.isdigit() for c in opt): continue
+                        
+                        # 📏 مطابقة الشكل والحجم (اسم مركب مع اسم مركب)
+                        if abs(len(opt.split()) - ans_word_count) <= 1:
                             fakes.append(opt)
-                            seen_norms.add(normalize_arabic(opt))
-                
+                            seen_norms.add(opt_norm)
+                            
                 if len(fakes) >= 3: 
                     return random.sample(fakes, 3)
 
-        # 3️⃣ نظام "الكلمة الأولى" (البحث عن نفس العائلة اللفظية)
-        if len(ans_words) >= 1:
-            first_word = re.sub(r'^ال', '', ans_words[0]) # إزالة ال التعريف من الإجابة أيضاً
-            if len(first_word) > 2:
-                res = supabase.table("bot_questions").select("correct_answer") \
-                    .ilike("correct_answer", f"%{first_word}%") \
-                    .limit(20).execute()
-                
-                for r in res.data:
-                    opt = str(r['correct_answer']).strip()
-                    if normalize_arabic(opt) not in seen_norms:
-                        fakes.append(opt)
-                        seen_norms.add(normalize_arabic(opt))
-                
-                if len(fakes) >= 3: return random.sample(fakes, 3)
-
-        # 4️⃣ نظام "التطابق الشكلي" (لضمان وجود خيارات دائماً)
+        # 4️⃣ [ البحث بالمطابقة الهيكلية - Structural Match ]
+        # إذا لم تكتمل الخيارات من البحث الدقيق، نبحث عن إجابات تشبه الإجابة الصحيحة هيكلياً
         if len(fakes) < 3:
-            # زيادة البحث في القسم ليشمل خيارات أكثر
-            res = supabase.table("bot_questions").select("correct_answer") \
-                .eq("category", category_name).limit(50).execute()
+            # نبحث في نفس القسم لضمان بقاء السياق (جغرافيا في جغرافيا، طب في طب)
+            res_category = query.eq("category", category_name).limit(200).execute()
             
-            for r in res.data:
+            for r in res_category.data:
+                opt = str(r['correct_answer']).strip()
+                opt_norm = normalize_arabic(opt)
+                
+                if opt_norm not in seen_norms:
+                    # 🛡️ درع الزيت والماء
+                    if is_numeric_ans and not any(c.isdigit() for c in opt): continue
+                    if not is_numeric_ans and any(c.isdigit() for c in opt): continue
+                    
+                    # 📏 مطابقة هيكلية قاسية: نفس عدد الكلمات، ومتقاربة في الطول الحرفي
+                    opt_words = len(opt.split())
+                    if opt_words == ans_word_count and abs(len(opt) - len(correct_ans)) <= 5:
+                        fakes.append(opt)
+                        seen_norms.add(opt_norm)
+                        
+            if len(fakes) >= 3:
+                return random.sample(fakes, 3)
+
+        # 5️⃣ [ التعبئة الجبرية - Fallback Safe ]
+        # في أسوأ الحالات النادرة، نكمل الخيارات بأقرب شيء منطقي من نفس القسم
+        if len(fakes) < 3 and res_category.data:
+            for r in res_category.data:
+                if len(fakes) >= 3: break
                 opt = str(r['correct_answer']).strip()
                 if normalize_arabic(opt) not in seen_norms:
-                    # تفضيل نفس عدد الكلمات
-                    if len(opt.split()) == len(ans_words):
+                    if (is_numeric_ans and any(c.isdigit() for c in opt)) or (not is_numeric_ans and not any(c.isdigit() for c in opt)):
                         fakes.append(opt)
                         seen_norms.add(normalize_arabic(opt))
 
-        # 5️⃣ التغطية النهائية (Fallback Safe)
-        # نستخدم min لضمان عدم حدوث خطأ إذا كانت القائمة صغيرة
+        # نضمن إرجاع 3 خيارات كحد أقصى (أو أقل إذا كانت القاعدة فقيرة جداً)
         return random.sample(fakes, min(len(fakes), 3))
 
     except Exception as e:
-        print(f"❌ خطأ في المحرك الموسوعي: {e}")
+        print(f"❌ خطأ في المغناطيس الملكي: {e}")
         return []
-      
 # ==========================================
 # 6. دالة الإرسال النهائية (الهجين الذكي)
 # ==========================================
