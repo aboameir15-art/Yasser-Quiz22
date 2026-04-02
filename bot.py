@@ -4760,7 +4760,7 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                 except Exception as up_err:
                     logging.error(f"⚠️ فشل تحديث السجل المركزي للسؤال {q_index}: {up_err}")
 
-            # 🟢 [ الخطوة 4: تحديث الرام المحلي (النبض) ]
+
             # نمرر البيانات لكل مجموعة لكي يعرف "معالج الإجابات" كيف يحسب النقاط
             for cid in chats_to_broadcast:
                 active_quizzes[cid].update({
@@ -4775,8 +4775,10 @@ async def engine_global_broadcast(chat_ids, quiz_data, owner_name, current_quiz_
                     "current_index": q_index,
                     "category": cat_name,
                     "hint_sent": False,
-                    "start_time": datetime.now() # لحظة انطلاق السؤال للقياس الدقيق
+                    "start_time": datetime.now(), # لحظة انطلاق السؤال للقياس الدقيق
+                    "participants_ids": chats_to_broadcast # 👈 [ الحل اليقين ]: هذه هي الوصلة المفقودة التي تربط المجموعات ببعضها!
                 })
+            
 
             # --- [ هـ ] تجهيز التلميح الذكي (Smart Hint) ---
             normal_hint_str = ""
@@ -5125,28 +5127,21 @@ async def unified_answer_checker(m: types.Message):
 
         correct_ans = str(quiz.get('ans', '')).strip()
         
-        # ⚖️ فحص صحة الإجابة (دالة الذكاء الاصطناعي أو المطابقة)
+        # ⚖️ فحص صحة الإجابة
         if is_answer_correct(user_text, correct_ans):
             
-            # 🏁 [محرك التوقيت الصانع]: قياس زمن الاستجابة بالملي ثانية
             start_t = quiz.get('start_time') or datetime.now()
             response_time = (datetime.now() - start_t).total_seconds()
             t = float(response_time)
 
-            # 🏆 [نظام الألقاب والنقاط المطور]
-            if t < 3.0:
-                s_title, extra_pts = "⚡ (خارق الصمت)", 100
-            elif t < 4.0:
-                s_title, extra_pts = "🚀 (القناص السريع)", 60
-            elif t < 7.0:
-                s_title, extra_pts = "🏹 (المتمكن)", 30
-            else:
-                s_title, extra_pts = "🧠 (الذكي)", 0
+            if t < 3.0: s_title, extra_pts = "⚡ (خارق الصمت)", 100
+            elif t < 4.0: s_title, extra_pts = "🚀 (القناص السريع)", 60
+            elif t < 7.0: s_title, extra_pts = "🏹 (المتمكن)", 30
+            else: s_title, extra_pts = "🧠 (الذكي)", 0
             
-            total_pts = 10 + extra_pts # النقاط الأساسية + بونص السرعة
+            total_pts = 10 + extra_pts 
 
-            # 🔥 [نظام منع التكرار العابر للمجموعات] 
-            # نتحقق: هل فاز هذا المستخدم في أي مجموعة أخرى مشاركة في نفس الإذاعة؟
+            # 🔥 [نظام منع التكرار العابر للمجموعات] - الآن سيعمل بفضل الوصلة
             p_ids = quiz.get('participants_ids', [cid])
             is_already_winner = False
             
@@ -5157,9 +5152,9 @@ async def unified_answer_checker(m: types.Message):
                         break
             
             if is_already_winner:
-                return # تجاهل الإجابة لأنه فاز بالفعل في مكان آخر
+                return # تجاهل الإجابة لأنه فاز بالفعل في مجموعة أخرى
 
-            # ✅ [تسجيل الفوز]: إضافة البطل لقائمة الفائزين في مجموعته الحالية
+            # ✅ [تسجيل الفوز مرة واحدة فقط!] 
             winner_data = {
                 'id': uid, 
                 'name': m.from_user.first_name, 
@@ -5169,17 +5164,15 @@ async def unified_answer_checker(m: types.Message):
             }
             quiz['winners'].append(winner_data)
 
-            # 🛑 [الإغلاق العالمي الفوري]: إذا كان الوضع "سرعة ⚡"
-            # بمجرد فوز شخص واحد، نغلق السؤال في كل المجموعات فوراً
+            # 🛑 [الإغلاق العالمي الفوري للسرعة]
             if quiz.get('mode') == 'السرعة ⚡':
                 for p_cid in p_ids:
                     if p_cid in active_quizzes:
                         active_quizzes[p_cid]['active'] = False
                 
-                logging.info(f"⚡ حسم عالمي: {m.from_user.first_name} في مجموعة {cid}")
+                logging.info(f"⚡ حسم عالمي: {m.from_user.first_name} أغلق السؤال في جميع المجموعات.")
 
-   
-            # 💾 حفظ الإجابة في سوبابيس (استخدام total_pts و s_title)
+            # 💾 حفظ الإجابة في سوبابيس
             db_id = quiz.get('db_quiz_id')
             if db_id:
                 def save_to_db():
@@ -5192,69 +5185,46 @@ async def unified_answer_checker(m: types.Message):
                             "group_name": m.chat.title,
                             "user_id": uid, 
                             "user_name": m.from_user.first_name,
-                            "answer_text": f"{user_text} {s_title}", # إضافة اللقب للنص
+                            "answer_text": f"{user_text} {s_title}",
                             "is_correct": True,
-                            "points_earned": total_pts, # النقاط الجديدة
-                            "response_time": t, # تسجيل الوقت للدقة
-                            "speed_rank": len(quiz.get('winners', [])) + 1
+                            "points_earned": total_pts,
+                            "response_time": t,
+                            "speed_rank": len(quiz.get('winners', [])) # كان هنا +1 مع التكرار
                         }).execute()
                     except Exception as e: logging.error(f"❌ خطأ حفظ النتيجة: {e}")
                 
                 asyncio.create_task(asyncio.to_thread(save_to_db))
-
-                # تسجيل الفائز مع بياناته الجديدة في الرام
-                quiz['winners'].append({
-                    "name": m.from_user.first_name, 
-                    "id": uid, 
-                    "pts": total_pts, 
-                    "title": s_title,
-                    "time": t
-                })
-                return
-
+                return # 👈 تم حذف كود الإضافة المكرر (Double Append) من هنا!
 
             else:
-                # ==========================================
-                # 🔒 مسار المسابقات الخاصة (نظام الإصلاح الشامل)
-                # ==========================================
-                # التأكد أن اللاعب لم يفز مسبقاً في هذا السؤال
-                if not any(w['id'] == uid for w in quiz.get('winners', [])):
-                    
-                    # 🔹 جلب البيانات من الذاكرة النشطة (التي وضعناها في بداية المحرك)
-                    db_quiz_id = quiz.get('quiz_id')    # الرقم المولد من سوبابيس
-                    cat_name = quiz.get('category', 'عام') # اسم القسم (جغرافيا/تاريخ..)
+                # 🔒 مسار المسابقات الخاصة
+                db_quiz_id = quiz.get('quiz_id')
+                cat_name = quiz.get('category', 'عام')
 
-                    # 💾 حفظ الإجابة في سوبابيس (جدول answers_log الجديد)
-                    def save_private_to_db():
-                        try:
-                            supabase.table("answers_log").insert({
-                                "quiz_id": db_quiz_id,          # ✅ تم التخلص من None
-                                "category_name": cat_name,      # ✅ إضافة اسم القسم
-                                "quiz_type": "private",
-                                "question_no": quiz.get('current_index', 1),
-                                "total_quiz_questions": quiz.get('total_questions', 1),
-                                "chat_id": cid,
-                                "group_name": m.chat.title or "مسابقة خاصة",
-                                "user_id": uid,
-                                "user_name": m.from_user.first_name,
-                                "answer_text": user_text,
-                                "is_correct": True,
-                                "points_earned": 2,
-                                "speed_rank": len(quiz.get('winners', [])) + 1
-                            }).execute()
-                        except Exception as e: 
-                            logging.error(f"❌ خطأ حفظ النتيجة في الجدول الجديد: {e}")
+                def save_private_to_db():
+                    try:
+                        supabase.table("answers_log").insert({
+                            "quiz_id": db_quiz_id,          
+                            "category_name": cat_name,      
+                            "quiz_type": "private",
+                            "question_no": quiz.get('current_index', 1),
+                            "total_quiz_questions": quiz.get('total_questions', 1),
+                            "chat_id": cid,
+                            "group_name": m.chat.title or "مسابقة خاصة",
+                            "user_id": uid,
+                            "user_name": m.from_user.first_name,
+                            "answer_text": user_text,
+                            "is_correct": True,
+                            "points_earned": 2,
+                            "speed_rank": len(quiz.get('winners', []))
+                        }).execute()
+                    except Exception as e: pass
 
-                    # تنفيذ الحفظ في خلفية البوت لضمان السرعة
-                    asyncio.create_task(asyncio.to_thread(save_private_to_db))
-
-                    # تسجيل الفائز في ذاكرة المسابقة الحالية
-                    quiz.setdefault('winners', []).append({"name": m.from_user.first_name, "id": uid})
-                    
-                    # إذا كان النمط "سرعة"، نوقف السؤال فور أول إجابة صحيحة
-                    if quiz.get('mode') == 'السرعة ⚡':
-                        quiz['active'] = False
-                    return
+                asyncio.create_task(asyncio.to_thread(save_private_to_db))
+                
+                if quiz.get('mode') == 'السرعة ⚡':
+                    quiz['active'] = False
+                return
 
 # ==========================================
 # --- [ رادار إجابات الـ Poll الهجين المطور + نظام حماية الغش ] ---
