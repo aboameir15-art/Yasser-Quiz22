@@ -2803,27 +2803,34 @@ async def activate_group_hub(message: types.Message):
 @dp.message_handler(lambda m: m.text == "تحكم")
 async def control_panel(message: types.Message):
     user_id = message.from_user.id
-    group_id = message.chat.id
+    first_name = message.from_user.first_name
 
-    # في المجموعات، نتحقق من حالة التفعيل
-    if message.chat.type != 'private':
-        # إذا لم يكن المطور، نتحقق من حالة القروب
-        if user_id != ADMIN_ID:
-            status = await get_group_status(group_id)
-            if status != "active":
-                return await message.reply("⚠️ <b>هذا القروب غير مفعل.</b>\nيجب أن يوافق المطور على طلب التفعيل أولاً.", parse_mode="HTML")
-            
-            # فحص هل المستخدم مشرف
-            member = await bot.get_chat_member(group_id, user_id)
-            if not (member.is_chat_admin() or member.is_chat_creator()):
-                return await message.reply("⚠️ لوحة التحكم مخصصة للمشرفين فقط.")
-
-    # إذا كان المطور أو قروب مفعل، تظهر اللوحة
-    txt = (f"👋 أهلاً بك في لوحة الإعدادات\n"
-           f"👑 المطور: <b>{OWNER_USERNAME}</b>")
+    # 🔓 [ الوصول العام ]: تم فتح اللوحة للجميع لاعتمادها على حماية الأزرار والعمليات اللاحقة
     
-    await message.answer(txt, reply_markup=get_main_control_kb(user_id), parse_mode="HTML")
+    # القالب الملكي المشروح - مركز القيادة الموحد
+    main_text = (
+        f"👋 <b>أهلاً بك يا {first_name} في عالم التحدي!</b>\n\n"
+        f"أنا مساعدك الذكي لإدارة وتنظيم المسابقات، إليك شرحاً مبسطاً للخيارات المتاحة لك:\n"
+        f"      ❃┅┅┅┄┄┄┈•❃•┈┄┄┄┅┅┅❃\n"
+        f"📜 <b>دليل استخدام الأزرار:</b>\n\n"
+        f"🔹 <b>[ 📝 إضافة خاصة ]</b>\n"
+        f"• مخصص لصناع المحتوى؛ يمكنك من خلاله كتابة أسئلتك الخاصة يدوياً وإنشاء أقسام حصرية بك لتحدي أصدقائك.\n\n"
+        f"🔹 <b>[ 📅 جلسة سابقة ]</b>\n"
+        f"• ميزة 'الإكمال الذكي'؛ تتيح لك العودة فوراً لآخر عمل قمت به (مثل إضافة أسئلة لم تكتمل) لتوفير جهدك ووقتك.\n\n"
+        f"🔹 <b>[ 🏆 تجهيز مسابقة ]</b>\n"
+        f"• المحرك الرئيسي؛ هنا تختار مصدر الأسئلة (أسئلة البوت أو أسئلتك)، وتحدد عدد الجولات ونمط التحدي.\n\n"
+        f"💡 <i>استخدم لوحة التحكم بالأسفل لبدء مغامرتك..</i>"
+    )
 
+    # إرسال اللوحة فوراً مع الكيبورد الرئيسي
+    try:
+        await message.answer(
+            main_text, 
+            reply_markup=get_main_control_kb(user_id), 
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logging.error(f"❌ خطأ في فتح لوحة التحكم: {e}")
 # ============================================================
 # هاندلر استدعاء المتجر (المتجر، متجر، أوامر المتجر)
 # ============================================================
