@@ -5108,30 +5108,25 @@ async def unified_answer_checker(m: types.Message):
     uid = m.from_user.id
     user_text = m.text.strip() if m.text else ""
 
-    # 1️⃣ فحص المسابقات النشطة
+    # 1️⃣ فحص وجود مسابقة نشطة في هذه المجموعة
     if cid in active_quizzes and active_quizzes[cid].get('active'):
         quiz = active_quizzes[cid]
 
-        # 🛑 [الخطوة 0: قفل نمط الأزرار] 🛑
-        # إذا كان نمط المسابقة هو "اختيارات"، نوقف الرادار النصي فوراً
-        # لكي لا يستطيع المستخدم كتابة الإجابة كتابةً
+        # 🛑 [حماية الأنماط]: إذا كان النمط "اختيارات 📊"، نتجاهل الكتابة النصية تماماً
         if quiz.get('quiz_style') == 'اختيارات 📊':
-            return # الخروج من الدالة وعدم الاستجابة للرسائل النصية
+            return 
 
-        correct_ans = str(quiz['ans']).strip()
-        # ⚖️ فحص صحة الإجابة (هذا سيعمل فقط في النمط "مباشر" الآن)
-        # ⚖️ فحص صحة الإجابة (هذا سيعمل فقط في النمط "مباشر" الآن)
+        correct_ans = str(quiz.get('ans', '')).strip()
+        
+        # ⚖️ فحص صحة الإجابة (دالة الذكاء الاصطناعي أو المطابقة)
         if is_answer_correct(user_text, correct_ans):
             
-            # 🏁 [إضافة أثير المطور]: حساب وقت الاستجابة فوراً
-            start_t = quiz.get('start_time')
-            if not start_t:
-                start_t = datetime.now() # حماية في حال فقدان الوقت
-            
+            # 🏁 [محرك التوقيت الصانع]: قياس زمن الاستجابة بالملي ثانية
+            start_t = quiz.get('start_time') or datetime.now()
             response_time = (datetime.now() - start_t).total_seconds()
             t = float(response_time)
 
-            # 🏆 حساب النقاط والألقاب (مثل نظام البول تماماً)
+            # 🏆 [نظام الألقاب والنقاط المطور]
             if t < 3.0:
                 s_title, extra_pts = "⚡ (خارق الصمت)", 100
             elif t < 4.0:
@@ -5143,28 +5138,40 @@ async def unified_answer_checker(m: types.Message):
             
             total_pts = 10 + extra_pts # النقاط الأساسية + بونص السرعة
 
-            # 🔥 [نظام منع التكرار العابر للمجموعات] 🔥
+            # 🔥 [نظام منع التكرار العابر للمجموعات] 
+            # نتحقق: هل فاز هذا المستخدم في أي مجموعة أخرى مشاركة في نفس الإذاعة؟
             p_ids = quiz.get('participants_ids', [cid])
-            is_already_winner_globally = False
+            is_already_winner = False
             
             for p_cid in p_ids:
                 if p_cid in active_quizzes:
                     if any(w['id'] == uid for w in active_quizzes[p_cid].get('winners', [])):
-                        is_already_winner_globally = True
+                        is_already_winner = True
                         break
             
-            if is_already_winner_globally:
-                logging.info(f"🚫 محاولة تكرار مرفوضة من {m.from_user.first_name}")
-                return
-            # 🛑 [نظام الإغلاق العالمي الفوري] ⚡ (وضع السرعة)
-            # 🛑 [نظام الإغلاق العالمي الفوري] ⚡ (وضع السرعة)
+            if is_already_winner:
+                return # تجاهل الإجابة لأنه فاز بالفعل في مكان آخر
+
+            # ✅ [تسجيل الفوز]: إضافة البطل لقائمة الفائزين في مجموعته الحالية
+            winner_data = {
+                'id': uid, 
+                'name': m.from_user.first_name, 
+                'time': round(t, 2), 
+                'pts': total_pts,
+                'title': s_title
+            }
+            quiz['winners'].append(winner_data)
+
+            # 🛑 [الإغلاق العالمي الفوري]: إذا كان الوضع "سرعة ⚡"
+            # بمجرد فوز شخص واحد، نغلق السؤال في كل المجموعات فوراً
             if quiz.get('mode') == 'السرعة ⚡':
                 for p_cid in p_ids:
                     if p_cid in active_quizzes:
                         active_quizzes[p_cid]['active'] = False
                 
-                logging.info(f"⚡ إغلاق عالمي: البطل {m.from_user.first_name} حسم السؤال.")
+                logging.info(f"⚡ حسم عالمي: {m.from_user.first_name} في مجموعة {cid}")
 
+   
             # 💾 حفظ الإجابة في سوبابيس (استخدام total_pts و s_title)
             db_id = quiz.get('db_quiz_id')
             if db_id:
