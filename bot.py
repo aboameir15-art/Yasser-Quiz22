@@ -2906,16 +2906,36 @@ async def handle_control_buttons(c: types.CallbackQuery, state: FSMContext):
         return await c.message.delete()
 
     # 2️⃣ [ زر الرجوع ] - النسخة المصلحة (التعديل بدل الإرسال)
+    # 2️⃣ [ زر الرجوع ] - النسخة المفسرة (الدليل الشامل)
     elif action == "back":
         await state.finish()
-        await c.answer("🔙 جاري العودة...")
-        # بدلاً من استدعاء control_panel التي ترسل رسالة جديدة، نعدل الرسالة الحالية
-        return await c.message.edit_text(
-            f"👋 **أهلاً بك في لوحة التحكم الرئيسية**\n\nاختر من الأسفل ما تود القيام به:",
-            reply_markup=get_main_control_kb(owner_id), # تأكد من وضع دالة الكيبورد الرئيسي هنا
-            parse_mode="Markdown"
+        first_name = c.from_user.first_name
+        owner_id = c.from_user.id
+        
+        await c.answer("🔙 جاري العودة للقائمة الرئيسية...")
+
+        # القالب الملكي مع شرح تفصيلي ليفهم المستخدم وظيفة كل زر
+        main_text = (
+            f"👋 <b>أهلاً بك يا {first_name} في مركز القيادة!</b>\n\n"
+            f"أنا مساعدك الذكي لإدارة المسابقات، إليك دليلك السريع:\n"
+            f"      ❃┅┅┅┄┄┄┈•❃•┈┄┄┄┅┅┅❃\n"
+            f"📜 <b>شرح المهام والعمليات:</b>\n\n"
+            f"🔹 <b>[ 📝 إضافة خاصة ]</b>\n"
+            f"• مخصص لصناع المحتوى؛ يمكنك من خلاله كتابة أسئلتك الخاصة يدويًا وإنشاء أقسام حصرية بك لتحدي أصدقائك.\n\n"
+            f"🔹 <b>[ 📅 جلسة سابقة ]</b>\n"
+            f"• هل انقطع اتصالك أو توقفت عن الإعداد؟ هذا الزر يعيدك لآخر مسودة قمت بالعمل عليها لتكمل من حيث توقفت.\n\n"
+            f"🔹 <b>[ 🏆 تجهيز مسابقة ]</b>\n"
+            f"• المحرك الرئيسي؛ هنا تختار مصدر الأسئلة (أسئلة البوت أو أسئلتك الخاصة)، وتحدد عدد الجولات ونوع التحدي.\n\n"
+            f"💡 <i>استخدم الأزرار بالأسفل للتنقل بين الأنظمة..</i>"
         )
 
+        # التعديل الفوري للرسالة
+        return await c.message.edit_text(
+            main_text,
+            reply_markup=get_main_control_kb(owner_id),
+            parse_mode="HTML"
+        )
+    
     # 3️⃣ [ زر إضافة خاصة ]
     elif action == "custom":
         await c.answer()
