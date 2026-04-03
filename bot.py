@@ -6023,33 +6023,15 @@ async def process_auth_callback(c: types.CallbackQuery):
 # ==========================================
 from aiohttp import web
 import os
+import asyncio
 
-# 1. الدالة التي تسببت في الخطأ (استقبال بيانات تسجيل الدخول)
+async def handle_ping(request):
+    return web.Response(text="🚀 البوت يعمل بنبض مستقر")
+
 async def handle_telegram_login(request):
-    """هذه الدالة تعالج البيانات القادمة من زر تسجيل دخول تليجرام"""
-    try:
-        params = request.query
-        user_id = params.get('id')
-        first_name = params.get('first_name')
-        
-        logging.info(f"👤 محاولة دخول للمستخدم: {first_name} ({user_id})")
-        
-        # يمكنك هنا إضافة منطق لحفظ بيانات المستخدم أو التحقق من الـ hash
-        
-        html_content = f"""
-        <html>
-            <head><title>Success</title></head>
-            <body style="text-align: center; padding-top: 50px; font-family: Arial;">
-                <h1 style="color: #27ae60;">✅ تم تسجيل الدخول بنجاح!</h1>
-                <p>أهلاً {first_name}، يمكنك العودة الآن إلى تطبيق التليجرام.</p>
-            </body>
-        </html>
-        """
-        return web.Response(text=html_content, content_type='text/html')
-    except Exception as e:
-        logging.error(f"Error in login handler: {e}")
-        return web.Response(text="❌ حدث خطأ أثناء تسجيل الدخول", status=500)
-        
+    return web.Response(text="✅ تم استقبال البيانات")
+
+
 async def handle_ping(request):
     # إضافة هيدر يخبر ريندر أن الاتصال يجب أن يبقى حياً
     return web.Response(
@@ -6080,25 +6062,28 @@ async def self_resuscitation():
         
 # 3. دالة التشغيل الشاملة (المايسترو)
 async def main_startup():
-    # أ) تشغيل سيرفر الويب الوهمي
+    # أ) إعداد سيرفر الويب
     app = web.Application()
     app.router.add_get('/', handle_ping)
     app.router.add_get('/login', handle_telegram_login)
+    
     runner = web.AppRunner(app)
     await runner.setup()
-    
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    logging.info(f"🌐 سيرفر الإنعاش يعمل بشراسة على المنفذ {port}")
+    logging.info(f"🌐 Server started on port {port}")
 
-    # ب) إطلاق رصاصة النبض الذاتي في الخلفية
-    asyncio.create_task(self_resuscitation())
-
-    # ج) تشغيل محرك التليجرام الأساسي (aiogram)
-    logging.info("🚀 جاري إقلاع البوت...")
-    await dp.start_polling()
-
+    # ب) تشغيل البوت (هنا التغيير لضمان عدم التعطل)
+    try:
+        logging.info("🚀 جاري إقلاع محرك التليجرام...")
+        # نستخدم skip_updates لمنع تراكم الرسائل القديمة عند التعطل
+        await dp.start_polling(reset_webhook=True)
+    except Exception as e:
+        logging.error(f"❌ خطأ في تشغيل البوت: {e}")
+    finally:
+        await bot.close()
+        
 if __name__ == '__main__':
     # دمج جميع العمليات في مسار واحد (Event Loop) يمنع التضارب
     loop = asyncio.get_event_loop()
