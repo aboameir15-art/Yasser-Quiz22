@@ -69,6 +69,10 @@ active_session_groups = {}
 # الذاكرة الحية للمسابقات المنطلقة حالياً
 # الهيكل: { chat_id: { 'title': str, 'admin_id': int, 'msg_id': int, 'status': str } }
 active_competition_sessions = {}
+
+# 1. في بداية الملف (خارج كل الدوال) قم بتعريف هذا المتغير
+bot_username = None 
+
    # ==========================================
 # 🧹 دالة المنظف الآلي (تحذف البيانات بعد دقيقة واحدة)
 # ==========================================
@@ -1168,6 +1172,7 @@ def format_group_card(group_data: dict):
     card += "✨ <i>تعاونوا لتصبح مجموعتكم هي الأكثر ذكاءً!</i>"
     
     return card
+    
 def update_system_setting(setting_name, new_value):
     """
     تحديث إعدادات النظام في جدول system_settings
@@ -1186,8 +1191,23 @@ def update_system_setting(setting_name, new_value):
 # ==========================================
 # 1. كيبوردات التحكم الرئيسية (Main Keyboards)
 # ==========================================
+# 2. في دالة on_startup (تأكد من إضافتها)
+async def on_startup(dp):
+    global bot_username
+    me = await bot.get_me()
+    bot_username = me.username
+    print(f"🚀 تم تشغيل البوت بنجاح: @{bot_username}")
+
+
+    # 3. الكيبورد المصحح (بدون await)
 def get_main_control_kb(user_id):
     """توليد كيبورد لوحة التحكم الرئيسية مشفرة بآيدي المستخدم"""
+    # نستخدم المتغير bot_username الذي جلبناه عند التشغيل
+    global bot_username
+    
+    # تأكد من وضع اسم مستخدم افتراضي في حال لم يتم الجلب بعد (للحماية)
+    username = bot_username if bot_username else "bot"
+    
     kb = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("🏆 إعداد مسابقه", callback_data=f"setup_quiz_{user_id}"),
         InlineKeyboardButton("📝 إنشاء أسئلتك", callback_data=f"custom_add_{user_id}"),
@@ -1195,9 +1215,10 @@ def get_main_control_kb(user_id):
         InlineKeyboardButton("📊 الترتيب العالمي", callback_data=f"dev_leaderboard_{user_id}"),
         InlineKeyboardButton("🛒 المتجر العالمي", callback_data=f"open_shop_{user_id}"),      
         InlineKeyboardButton("💻 :مطور البوت", url="https://t.me/Ya_79k"),
-        InlineKeyboardButton("➕ أضفني لمجموعتك الآن", url=f"https://t.me/{(await bot.get_me()).username}?startgroup=true")
+        InlineKeyboardButton("➕ أضفني لمجموعتك الآن", url=f"https://t.me/{username}?startgroup=true")
     )
     return kb
+
 
 # 3️⃣ [ دالة عرض القائمة الرئيسية للأقسام ]
 async def custom_add_menu(c, owner_id, state):
@@ -1211,6 +1232,7 @@ async def custom_add_menu(c, owner_id, state):
         parse_mode="Markdown"
     )
     await c.answer()
+    
 # ==========================================
 # ---الدالة التي طلبتها (تأكد أنها موجودة بهذا الاسم) ---
 # ==========================================
@@ -1222,7 +1244,8 @@ def get_categories_kb(user_id):
     
     return kb
 
-# ==========================================
+
+    # ==========================================
 # 2. دوال عرض الواجهات الموحدة (UI Controllers)
 # ==========================================
 async def show_category_settings_ui(message: types.Message, cat_id, owner_id, is_edit=True):
@@ -1271,7 +1294,6 @@ def get_setup_quiz_kb(user_id):
         InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data=f"back_to_control_{user_id}")
     )
     return kb
-
 # ============================================================
 # 1. دوال الأزرار (Keyboards)
 # ============================================================
@@ -1294,7 +1316,6 @@ def get_back_keyboard():
         InlineKeyboardButton("❌ : إغلاق", callback_data="close_card")
     )
     return keyboard
-
 # ============================================================
 # 2. رسالة الترحيب الرئيسية
 # ============================================================
