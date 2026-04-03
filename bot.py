@@ -73,7 +73,7 @@ active_competition_sessions = {}
 # 1. في بداية الملف (خارج كل الدوال) قم بتعريف هذا المتغير
 bot_username = None 
 
-   # ==========================================
+ # ==========================================
 # 🧹 دالة المنظف الآلي (تحذف البيانات بعد دقيقة واحدة)
 # ==========================================
 # كود تنظيف آمن (اختياري)
@@ -153,7 +153,6 @@ def get_hybrid_poll_style(q_data, current_index, total_q, cat_name):
     )
     
     return poll_title
-
 # ==========================================
 # 5. دالة المايسترو (بنظام الـ Poll الهجين)
 # ==========================================
@@ -269,7 +268,6 @@ def normalize_arabic(text):
     text = re.sub(r'ى', 'ي', text)
     text = re.sub(r'[\u064B-\u0652]', '', text)
     return text
-
 # ==========================================
 # --- [ مغناطيس أثير الملكي: الدقة المطلقة 2026 ] ---
 # ==========================================
@@ -6028,6 +6026,35 @@ import os
 
 # 1. دالة الرد على النبض (الوجه الذي يراه خادم ريندر)
 # اجعل الرد سريعاً جداً وخفيفاً
+from aiohttp import web
+import logging
+
+# 1. الدالة التي تسببت في الخطأ (استقبال بيانات تسجيل الدخول)
+async def handle_telegram_login(request):
+    """هذه الدالة تعالج البيانات القادمة من زر تسجيل دخول تليجرام"""
+    try:
+        params = request.query
+        user_id = params.get('id')
+        first_name = params.get('first_name')
+        
+        logging.info(f"👤 محاولة دخول للمستخدم: {first_name} ({user_id})")
+        
+        # يمكنك هنا إضافة منطق لحفظ بيانات المستخدم أو التحقق من الـ hash
+        
+        html_content = f"""
+        <html>
+            <head><title>Success</title></head>
+            <body style="text-align: center; padding-top: 50px; font-family: Arial;">
+                <h1 style="color: #27ae60;">✅ تم تسجيل الدخول بنجاح!</h1>
+                <p>أهلاً {first_name}، يمكنك العودة الآن إلى تطبيق التليجرام.</p>
+            </body>
+        </html>
+        """
+        return web.Response(text=html_content, content_type='text/html')
+    except Exception as e:
+        logging.error(f"Error in login handler: {e}")
+        return web.Response(text="❌ حدث خطأ أثناء تسجيل الدخول", status=500)
+        
 async def handle_ping(request):
     # إضافة هيدر يخبر ريندر أن الاتصال يجب أن يبقى حياً
     return web.Response(
