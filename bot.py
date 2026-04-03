@@ -6083,6 +6083,7 @@ async def main_startup():
     # أ) تشغيل سيرفر الويب الوهمي
     app = web.Application()
     app.router.add_get('/', handle_ping)
+    app.router.add_get('/login', handle_telegram_login)
     runner = web.AppRunner(app)
     await runner.setup()
     
