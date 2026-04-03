@@ -6024,11 +6024,6 @@ async def process_auth_callback(c: types.CallbackQuery):
 from aiohttp import web
 import os
 
-# 1. دالة الرد على النبض (الوجه الذي يراه خادم ريندر)
-# اجعل الرد سريعاً جداً وخفيفاً
-from aiohttp import web
-import logging
-
 # 1. الدالة التي تسببت في الخطأ (استقبال بيانات تسجيل الدخول)
 async def handle_telegram_login(request):
     """هذه الدالة تعالج البيانات القادمة من زر تسجيل دخول تليجرام"""
@@ -6062,8 +6057,7 @@ async def handle_ping(request):
         headers={"Connection": "keep-alive"}
     )
 
-# 2. 🪄 الخدعة السحرية: النبض الذاتي (البوت يوقظ نفسه)
-import random
+# 2. 🪄 الخدعة السحرية: النبض الذاتي (البوت يوقظ ن
 
 async def self_resuscitation():
     render_url = os.getenv("RENDER_EXTERNAL_URL") 
@@ -6091,8 +6085,7 @@ async def main_startup():
     app.router.add_get('/', handle_ping)
     runner = web.AppRunner(app)
     await runner.setup()
-    # لاستقبال بيانات تسجيل الدخول من الزر الذي وضعته
-    app.router.add_get('/login', handle_telegram_login)
+    
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
@@ -6112,3 +6105,4 @@ if __name__ == '__main__':
         loop.run_until_complete(main_startup())
     except KeyboardInterrupt:
         logging.info("🛑 تم إيقاف البوت يدوياً.")
+
