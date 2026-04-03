@@ -1346,6 +1346,9 @@ def get_leaderboard_main_message():
 # ============================================================
 # 3. قوالب التنسيق الفخمة (Templates)
 # ============================================================
+# 3. قوالب التنسيق الفخمة (نسخة درع الخصوصية 2026)
+# ============================================================
+
 async def get_user_link_protected(u_id, name):
     """دالة ذكية لتحديد نوع الرابط بناءً على الخصوصية"""
     try:
@@ -1363,7 +1366,7 @@ async def format_top_iq_list(data: list):
     header = "<b>🧠 : سـجـل أذكـيـاء الـمـجـرات</b>\n"
     header += "<b>— — — — — — — — — — — —</b>\n\n"
     body = ""
-    medals = ["🥇 :", "🥈 :", "🥉 :", "🏅 :", "🏅 :", "🏅 :", "🏅 :", "🏅 :", "🏅 :", "🏅 :"]
+    medals = ["🥇 ا:ا", "🥈 ا:ا", "🥉 ا:ا", "🏅 ا:ا", "🏅 ا:ا", "🏅 ا:ا", "🏅 ا:ا", "🏅 ا:ا", "🏅 ا:ا", "🏅 ا:ا"]
     
     for i, user in enumerate(data):
         rank_icon = medals[i] if i < len(medals) else f"<b>{i+1} :</b>"
@@ -1379,16 +1382,16 @@ async def format_top_iq_list(data: list):
         flag = user.get('country_flag', '🌐')
         
         body += f"{rank_icon} {user_link} {flag}\n"
-        body += f"    🔸 <b>: الرتبة :</b> <code>{rank_n}</code>\n"
-        body += f"    🔹 <b>: الذكاء :</b> <code>{iq} IQ</code> | <b>الاجابات :</b> <code>{ans}</code>\n\n"
+        body += f"🔸 <b>: الرتبة :</b> <code>{rank_n}</code>\n"
+        body += f"🔹 <b>: الذكاء :</b> <code>{iq} IQ</code> | <b>الاجابات :</b> <code>{ans}</code>\n\n"
     return header + body + "<b>— — — — — — — — — — — —</b>"
 
 async def format_top_wealth_list(data: list):
     header = "<b>💰 : قـائـمـة أغـنـيـاء الـعـرب</b>\n"
     header += "<b>— — — — — — — — — — — —</b>\n\n"
     body = ""
-    medals = ["👑 :", "💎 :", "💰 :", "💵 :", "💵 :", "💵 :", "💵 :", "💵 :", "💵 :", "💵 :"]
-    
+    medals = ["👑 ا:ا", "💎 ا:ا", "💰 ا:ا", "💵 ا:ا", "💵 ا:ا", "💵 ا:ا", "💵 ا:ا", "💵 ا:ا", "💵 ا:ا", "💵 ا:ا"]
+  
     for i, user in enumerate(data):
         rank_icon = medals[i] if i < len(medals) else f"<b>{i+1} :</b>"
         u_id = user.get('user_id')
@@ -1403,8 +1406,8 @@ async def format_top_wealth_list(data: list):
         flag = user.get('country_flag', '🌐')
         
         body += f"{rank_icon} {user_link} {flag}\n"
-        body += f"    🔸 <b>: الرصيد :</b> <code>{money:,}</code> ن\n"
-        body += f"    🔹 <b>: المقتنيات :</b> <code>{items}</code> | <b>الهدايا :</b> <code>{gifts}</code>\n\n"
+        body += f"🔸 <b>: الرصيد :</b> <code>{money:,}</code> زد\n"
+        body += f"🔹 <b>: المقتنيات :</b> <code>{items}</code> | <b>الهدايا :</b> <code>{gifts}</code>\n\n"
     return header + body + "<b>— — — — — — — — — — — —</b>"
 
 async def format_top_groups_list(data: list):
@@ -1426,9 +1429,9 @@ async def format_top_groups_list(data: list):
         m_count = group.get('members_count', 0)
         
         body += f"{rank_icon} <b>{g_name}</b>\n"
-        body += f"    🔸 <b>: إجمالي النقاط :</b> <code>{pts:,}</code> ن\n"
-        body += f"    🔹 <b>: العضو الأبرز :</b> {top_member_link}\n"
-        body += f"    👥 <b>: عدد الأعضاء :</b> <code>{m_count}</code> عضواً\n\n"
+        body += f"🔸 <b>: إجمالي النقاط :</b> <code>{pts:,}</code> زد\n"
+        body += f"🔹 <b>: العضو الأبرز :</b> {top_member_link}\n"
+        body += f"👥 <b>: عدد الأعضاء :</b> <code>{m_count}</code> عضواً\n\n"
     return header + body + "<b>— — — — — — — — — — — —</b>"
     
 # ============================================================
@@ -1447,7 +1450,7 @@ async def process_board_navigation(c: types.CallbackQuery):
         text, kb = get_leaderboard_main_message()
         return await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
 
-    await c.answer("⏳ جاري استخراج قائمة العمالقة...")
+    await c.answer("⏳ جاري استخراج التوب تفعيل حملية اسماء البنات انتظر قليلاً...")
 
     try:
         # 🟢 التعديل ليتوافق مع أسماء أعمدة جداول ياسر الجديدة
@@ -1505,7 +1508,7 @@ async def cmd_show_leaderboard(message: types.Message):
     sent_msg = await message.reply(text=text, reply_markup=reply_markup, parse_mode="HTML")
     
     # مهمة الحذف التلقائي بعد 60 ثانية
-    await asyncio.sleep(120)
+    await asyncio.sleep(300)
     try:
         await sent_msg.delete()
         # اختياري: حذف رسالة المستخدم أيضاً ليبقى الشات نظيفاً
