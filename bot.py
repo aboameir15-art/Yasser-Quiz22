@@ -257,9 +257,11 @@ async def record_poll_answer_in_db(answer_data):
         # في حال وجود خطأ (مثلاً آيدي غير موجود أو مشكلة في الاتصال)
         print(f"❌ فشل تسجيل الإجابة في answers_log: {e}")
 
+        
 # ==========================================
-# --- [ دالة تسجيل الإجابة في سوبابيس المحدثة ] ---
+# --- [  ] ---
 # ==========================================
+# 1. دالة المعالجة القياسية (لضمان مطابقة النصوص)
 def normalize_arabic(text):
     if not text: return ""
     text = str(text).strip()
@@ -268,156 +270,159 @@ def normalize_arabic(text):
     text = re.sub(r'ى', 'ي', text)
     text = re.sub(r'[\u064B-\u0652]', '', text)
     return text
-# ==========================================
-# --- [ مغناطيس أثير الملكي V2: الذكاء المفتوح 2026 ] ---
-# ==========================================
+
+# 2. بداية المغناطيس الملكي V3: محرك الاستنتاج
 async def get_ultra_smart_options(question_text, category_name, correct_ans):
     try:
         norm_correct = normalize_arabic(correct_ans)
+        norm_q = normalize_arabic(question_text)
         fakes = []
         seen_norms = {norm_correct}
-        
-        # 1️⃣ [ فلترة السؤال بعمق ]
-        question_tools = [
-            'ما', 'ماذا', 'من', 'متى', 'اين', 'أين', 'كيف', 'كم', 'هل', 'اي', 'أي', 
-            'لماذا', 'ماهي', 'ماهو', 'منهو', 'اذكر', 'اسم', 'يسمى', 'تسمى', 'تعتبر', 
-            'يعتبر', 'يبلغ', 'تبلغ', 'عدد', 'هي', 'هو', 'في', 'على', 'عن', 'الذي', 'التي',
-            'بين', 'منها', 'له', 'لها', 'فيها', 'عنه', 'عنها'
-        ]
-        
-        # تنظيف السؤال وإزالة أحرف الجر المتصلة (لقياس، لحساب، باستخدام)
-        q_words = []
-        for w in question_text.split():
-            clean_w = normalize_arabic(w)
-            # إزالة بادئات الجر الشائعة إذا كانت الكلمة أطول من 4 حروف
-            if len(clean_w) > 4 and (clean_w.startswith('ل') or clean_w.startswith('ب') or clean_w.startswith('ك')):
-                clean_w = clean_w[1:]
-            
-            if clean_w not in question_tools and len(clean_w) > 2:
-                q_words.append(clean_w)
 
-        # استخراج الكلمة الجوهرية (أول أو ثاني كلمة قوية متبقية)
-        core_entity_norm = q_words[0] if q_words else ""
-        if len(q_words) > 1 and (core_entity_norm == "وحدة" or core_entity_norm == "جهاز"):
-            core_entity_norm = q_words[1] # مثل "وحدة قياس" نأخذ "قياس"
+        # --- [ قاموس الأنماط الدلالية الشامل ] ---
+        patterns = {
+            'history_war': [
+                'عام', 'سنه', 'سنة', 'تاريخ', 'قرن', 'ميلادي', 'هجري', 'معركه', 'معركة', 
+                'غزوه', 'غزوة', 'ثوره', 'ثورة', 'حضاره', 'حضارة', 'امبراطور', 'ملك', 'سلالة', 'عصر'
+            ],
+            'geography_world': [
+                'دوله', 'دولة', 'بلد', 'عاصمه', 'عاصمة', 'مدينه', 'مدينة', 'نهر', 'بحر', 
+                'محيط', 'جبل', 'قاره', 'قارة', 'جزيره', 'جزيرة', 'خليج', 'مضيق', 'مناخ', 'تضاريس'
+            ],
+            'science_tech': [
+                'كوكب', 'عنصر', 'غاز', 'حيوان', 'طائر', 'نبات', 'جسم', 'خليه', 'خلية', 
+                'جهاز', 'مخترع', 'اكتشف', 'فيزياء', 'كيمياء', 'مجره', 'مجرة', 'فضاء'
+            ],
+            'medical_health': [
+                'عضو', 'مرض', 'دواء', 'فيتامين', 'هرمون', 'عصب', 'عظم', 'دم', 'قلب', 
+                'دماغ', 'عضله', 'غده', 'فيروس', 'بكتيريا', 'علاج'
+            ],
+            'humanities': [
+                'من هو', 'الشاعر', 'مؤلف', 'كاتب', 'فنان', 'رسام', 'فيلسوف', 'رواية', 
+                'قصيدة', 'لوحة', 'تمثال', 'مسرحية', 'فكر', 'منطق'
+            ],
+            'islamic_religion': [
+                'سوره', 'سورة', 'آيه', 'آية', 'نبي', 'رسول', 'الصحابي', 'تابعي', 'فقيه', 
+                'كتاب', 'تفسير', 'حديث', 'صلاه', 'حج', 'زكاه'
+            ],
+            'sports_ent': [
+                'لاعب', 'نادي', 'منتخب', 'بطوله', 'كأس', 'هدف', 'اولمبياد', 'فيلم', 'مسلسل'
+            ],
+            'math_logic': [
+                'حساب', 'رياضيات', 'مربع', 'مثلث', 'زاويه', 'مجموع', 'ناتج', 'معادله', 'رقم'
+            ],
+            'measurements': [
+                'كم عدد', 'كم يبلغ', 'ما طول', 'ما وزن', 'نسبه', 'مسافه', 'الوحده', 'لقياس', 'سرعه'
+            ],
+            'eco_law_pol': [
+                'عملة', 'بورصة', 'اقتصاد', 'شركة', 'قانون', 'محكمة', 'دستور', 'رئيس', 'وزير'
+            ],
+            'language_proverbs': [
+                'مرادف', 'ضد', 'معنى', 'جمع', 'مفرد', 'مثل', 'حكمه', 'كلمة', 'لغة'
+            ],
+            'lifestyle_brands': [
+                'اكله', 'وجبه', 'مطبخ', 'فاكهه', 'سياره', 'ماركه', 'شعار', 'هاتف', 'برج'
+            ],
+            'myth_folklore': [
+                'اسطورة', 'خرافة', 'اله', 'عملاق', 'تنين'
+            ]
+        }
 
-        # 2️⃣ [ تحليل الإجابة الصحيحة (رأس الإجابة) ]
-        ans_parts = correct_ans.split()
-        ans_word_count = len(ans_parts)
-        is_numeric_ans = any(char.isdigit() for char in correct_ans)
-        
-        # "Anchor" - الكلمة الأولى من الإجابة (مثال: "قانون" من "قانون أوم")
-        ans_anchor = normalize_arabic(ans_parts[0]) if ans_word_count > 1 else ""
-
-        query = supabase.table("bot_questions").select("correct_answer")
-
-        # 3️⃣ [ الغوص الدقيق 1: استراتيجية "رأس الإجابة" ]
-        if ans_anchor and not is_numeric_ans:
-            # نبحث عن إجابات تبدأ بنفس الكلمة (قانون نيوتن، قانون فاراداي..)
-            res_anchor = query.ilike("correct_answer", f"{ans_anchor}%").limit(50).execute()
-            if res_anchor.data:
-                for r in res_anchor.data:
-                    opt = str(r['correct_answer']).strip()
-                    opt_norm = normalize_arabic(opt)
-                    if opt_norm not in seen_norms and not any(c.isdigit() for c in opt):
-                        fakes.append(opt)
-                        seen_norms.add(opt_norm)
-                if len(fakes) >= 3: return random.sample(fakes, 3)
-
-        # 4️⃣ [ الغوص الدقيق 2: البحث بـ "جوهر السؤال" في نفس القسم ]
-        if core_entity_norm:
-            res_core = query.eq("category", category_name).ilike("question_content", f"%{core_entity_norm}%").limit(50).execute()
-            if res_core.data:
-                for r in res_core.data:
-                    opt = str(r['correct_answer']).strip()
-                    opt_norm = normalize_arabic(opt)
-                    if opt_norm not in seen_norms:
-                        # درع الأرقام والنصوص
-                        if (is_numeric_ans and any(c.isdigit() for c in opt)) or (not is_numeric_ans and not any(c.isdigit() for c in opt)):
-                            # مطابقة الطول التقريبي
-                            if abs(len(opt.split()) - ans_word_count) <= 1:
-                                fakes.append(opt)
-                                seen_norms.add(opt_norm)
-                if len(fakes) >= 3: return random.sample(fakes, 3)
-
-        # 5️⃣ [ كسر الحدود: البحث العشوائي الهيكلي في "كل الأقسام" ]
-        # إذا القسم فقير، نبحث في كل قاعدة البيانات عن إجابة تشبه إجابتنا شكلاً
-        if len(fakes) < 3:
-            # نجلب 200 إجابة عشوائية من أي قسم
-            res_global = supabase.table("bot_questions").select("correct_answer").limit(200).execute()
-            
-            # ترتيب عشوائي لعدم تكرار نفس الخيارات دائماً
-            global_data = res_global.data if res_global.data else []
-            random.shuffle(global_data)
-
-            for r in global_data:
-                opt = str(r['correct_answer']).strip()
-                opt_norm = normalize_arabic(opt)
+        # --- [ رادار الكشف عن "نوع" السؤال ] ---
+        detected_pattern = None
+        for p_name, keywords in patterns.items():
+            if any(k in norm_q for k in keywords):
+                detected_pattern = p_name
+                break
                 
-                if opt_norm not in seen_norms:
-                    if is_numeric_ans and any(c.isdigit() for c in opt):
-                        # مطابقة أرقام
-                        fakes.append(opt)
-                        seen_norms.add(opt_norm)
-                    elif not is_numeric_ans and not any(c.isdigit() for c in opt):
-                        # مطابقة نصوص بنفس عدد الكلمات تقريباً
-                        if abs(len(opt.split()) - ans_word_count) <= 1:
-                            fakes.append(opt)
-                            seen_norms.add(opt_norm)
+        # 3️⃣ [ تحليل هوية الإجابة الصحيحة ]
+        # 3️⃣ [ تحليل هوية الإجابة الصحيحة ]
+        is_date = True if (correct_ans.isdigit() and 1000 <= int(correct_ans) <= 2100) else False
+        is_numeric = any(char.isdigit() for char in correct_ans) and not is_date
+        ans_word_count = len(correct_ans.split())
 
-                if len(fakes) >= 3: return random.sample(fakes, 3)
+        # 🧠 [ الفكرة العبقرية 1: هندسة السراب المعكوس للتواريخ والأرقام ]
+        if is_date:
+            # إذا كان 1945 -> نولد 1954 (لخبطة بصرية) + أرقام قريبة
+            swapped_date = correct_ans[:-2] + correct_ans[-1] + correct_ans[-2] if len(correct_ans) == 4 else str(int(correct_ans) + 10)
+            numeric_fakes = list(set([swapped_date, str(int(correct_ans) + 5), str(int(correct_ans) - 10)]))
+            return [f for f in numeric_fakes if f != correct_ans][:3]
 
-        # 6️⃣ [ صمام الأمان الأخير: إجابات عشوائية حقيقية بدلاً من "إجابة بديلة" ]
-        # إذا كل شيء فشل، سنأخذ إجابات حقيقية من قاعدة البيانات لكي يبدو البول حقيقياً
-        if len(fakes) < 3:
-            res_safe = supabase.table("bot_questions").select("correct_answer").limit(50).execute()
-            for r in res_safe.data:
-                opt = str(r['correct_answer']).strip()
-                opt_norm = normalize_arabic(opt)
-                if opt_norm not in seen_norms and len(opt) < 20: # شرط أن لا تكون إجابة طويلة جداً
+        elif is_numeric and correct_ans.isdigit():
+            num = int(correct_ans)
+            step = max(1, int(num * 0.15)) # نسبة تفاوت 15%
+            numeric_fakes = [str(num + step), str(abs(num - step)), str(num + (step * 2))]
+            random.shuffle(numeric_fakes)
+            return numeric_fakes
+
+        import asyncio
+        query = supabase.table("bot_questions").select("correct_answer", "question_content")
+
+        # 4️⃣ [ استراتيجية الغوص الطبقي الموازي (الصاروخي) ]
+        potential_res = []
+        
+        if detected_pattern:
+            search_k = random.choice(patterns[detected_pattern])
+            # ✅ تغليف سوبابيس لمنع اختناق البوت
+            res_p = await asyncio.to_thread(query.ilike("question_content", f"%{search_k}%").limit(60).execute)
+            if res_p.data: potential_res.extend(res_p.data)
+
+        if not potential_res:
+            q_words = [w for w in question_text.split() if len(w) > 3]
+            if q_words:
+                core_w = normalize_arabic(q_words[-1])
+                # ✅ تغليف سوبابيس هنا أيضاً
+                res_c = await asyncio.to_thread(query.ilike("question_content", f"%{core_w}%").limit(30).execute)
+                if res_c.data: potential_res.extend(res_c.data)
+
+        # 5️⃣ [ الفلترة المنطقية (مصفاة أثير الاحترافية) ]
+        random.shuffle(potential_res)
+        
+        for r in potential_res:
+            opt = str(r['correct_answer']).strip()
+            opt_norm = normalize_arabic(opt)
+            
+            if opt_norm not in seen_norms:
+                if is_numeric and not any(c.isdigit() for c in opt): continue
+                if not is_numeric and any(c.isdigit() for c in opt): continue
+                
+                # السماح بمرونة بسيطة في الطول لعدم تضييق الخيارات تماماً
+                if abs(len(opt.split()) - ans_word_count) <= 2:
                     fakes.append(opt)
                     seen_norms.add(opt_norm)
+                
+                if len(fakes) >= 6: break
+
+        # 🧬 [ الفكرة العبقرية 2: خلايا الـ DNA لإنقاذ السيرفر (صفر استهلاك) ]
+        # بدلاً من إرسال طلب ثالث مرهق لـ سوبابيس إذا فشلنا، نسحب من درع الطوارئ
+        if len(fakes) < 3:
+            emergency_dna = {
+                'geography_world': ['مصر', 'سوريا', 'باريس', 'لندن', 'آسيا', 'أفريقيا', 'النيل'],
+                'history_war': ['الحرب العالمية', 'الدولة العثمانية', 'الرومان', 'الفرس', 'العباسيين'],
+                'science_tech': ['الاكسجين', 'الهيدروجين', 'الجاذبية', 'الخلية', 'نيوتن', 'اينشتاين'],
+                'sports_ent': ['برشلونة', 'ريال مدريد', 'البرازيل', 'الارجنتين', 'ميسي', 'كريستيانو']
+            }
+            # إذا عرفنا النمط نأخذ منه، وإلا نأخذ خيارات منطقية عامة متوافقة مع طول الإجابة
+            dna_pool = emergency_dna.get(detected_pattern, ['جميع ما سبق', 'غير معروف', 'لا شيء مما ذكر'])
+            
+            for dna_opt in dna_pool:
+                if normalize_arabic(dna_opt) not in seen_norms and not is_numeric:
+                    fakes.append(dna_opt)
+                    seen_norms.add(normalize_arabic(dna_opt))
                 if len(fakes) >= 3: break
 
-        return fakes[:3] # إرجاع ما تيسر (حد أقصى 3)
+        # 7️⃣ [ النتيجة النهائية: التمويه القاتل ]
+        # إضافة درع أخير لحماية أزرار التليجرام من الخطأ (يجب أن ترجع الدالة دائماً خيارات)
+        while len(fakes) < 3:
+            fakes.append(f"خيار بديل {random.randint(100,999)}")
+
+        return random.sample(fakes, 3)
 
     except Exception as e:
-        print(f"❌ خطأ في المغناطيس الملكي: {e}")
-        return []
-# ==========================================
-# 6. دالة الإرسال النهائية (الهجين الذكي)
-# ==========================================
-async def send_hybrid_poll_to_chat(chat_id, title, options, correct_id, correct_text, q_id):
-    """
-    إرسال الـ Poll الفعلي وتسجيله في الرام للرصد اللحظي
-    """
-    try:
-        # 🚀 1. إرسال الاستفتاء الرسمي لتليجرام
-        quiz_msg = await bot.send_poll(
-            chat_id=chat_id,
-            question=title,           # النص المنسق (رقم السؤال + القسم + السؤال)
-            options=options,         # قائمة الخيارات (المغناطيس الراداري)
-            type='quiz',             # وضع الاختبار (إجابة واحدة صحيحة)
-            correct_option_id=correct_id, # موقع الإجابة الصحيحة
-            is_anonymous=False,      # ضروري جداً لرصد "من سبق لبق"
-            explanation=f"✅ الإجابة الصحيحة هي: {correct_text}", # تظهر للمخطئ
-            explanation_parse_mode='HTML'
-        )
-
-        # 🚀 2. تسجيل الـ Poll في "ذاكرة الرصد السريعة" (الرام)
-        # نربط معرف الـ Poll (poll.id) ببيانات السؤال لكي نعرفه عندما يضغط اللاعب
-        active_polls[quiz_msg.poll.id] = {
-            "q_id": q_id,
-            "correct_id": correct_id,
-            "correct_text": correct_text,
-            "start_time": datetime.now() # لحساب سرعة الإجابة بالملي ثانية
-        }
+        print(f"❌ خطأ في المغناطيس الملكي V3: {e}")
+        # درع الطوارئ الحاسم لعدم تعطل اللعبة
+        return ["إجابة تمويهية أ", "إجابة تمويهية ب", "إجابة تمويهية ج"]
         
-        return quiz_msg
-
-    except Exception as e:
-        print(f"❌ فشل إرسال الـ Poll الهجين: {e}")
-        return None
 # ==========================================
 # --- [ 2. بداية الدوال المساعدة قالب الاجابات  ] ---
 # ==========================================
