@@ -1346,52 +1346,91 @@ def get_leaderboard_main_message():
 # ============================================================
 # 3. قوالب التنسيق الفخمة (Templates)
 # ============================================================
+async def get_user_link_protected(u_id, name):
+    """دالة ذكية لتحديد نوع الرابط بناءً على الخصوصية"""
+    try:
+        user_info = await bot.get_chat(u_id)
+        is_female = await deep_privacy_scan(user_info) # تأكد من وجود هذه الدالة في ملفك
+    except:
+        is_female = False # في حال الفشل نعتبره حساب عادي (عام)
 
-def format_top_iq_list(data: list):
+    if is_female:
+        return f"<b>{name}</b> 🛡️" # اسم فقط بدون رابط حمايةً لها
+    else:
+        return f'<a href="tg://user?id={u_id}">{name}</a>'
+
+async def format_top_iq_list(data: list):
     header = "<b>🧠 : سـجـل أذكـيـاء الـمـجـرات</b>\n"
     header += "<b>— — — — — — — — — — — —</b>\n\n"
     body = ""
     medals = ["🥇 :", "🥈 :", "🥉 :", "🏅 :", "🏅 :", "🏅 :", "🏅 :", "🏅 :", "🏅 :", "🏅 :"]
+    
     for i, user in enumerate(data):
-        rank_icon = medals[i]
+        rank_icon = medals[i] if i < len(medals) else f"<b>{i+1} :</b>"
+        u_id = user.get('user_id')
         name = user.get('user_name', 'مجهول')
-        iq = user.get('iq_score', 0); ans = user.get('correct_answers_count', 0)
-        rank_n = user.get('educational_rank', 'طالب'); flag = user.get('country_flag', '🌐')
-        body += f"{rank_icon} <b>{name}</b> {flag}\n"
+        
+        # تفعيل درع الحماية والرابط
+        user_link = await get_user_link_protected(u_id, name)
+        
+        iq = user.get('iq_score', 0)
+        ans = user.get('correct_answers_count', 0)
+        rank_n = user.get('educational_rank', 'طالب')
+        flag = user.get('country_flag', '🌐')
+        
+        body += f"{rank_icon} {user_link} {flag}\n"
         body += f"    🔸 <b>: الرتبة :</b> <code>{rank_n}</code>\n"
         body += f"    🔹 <b>: الذكاء :</b> <code>{iq} IQ</code> | <b>الاجابات :</b> <code>{ans}</code>\n\n"
     return header + body + "<b>— — — — — — — — — — — —</b>"
 
-def format_top_wealth_list(data: list):
+async def format_top_wealth_list(data: list):
     header = "<b>💰 : قـائـمـة أغـنـيـاء الـعـرب</b>\n"
     header += "<b>— — — — — — — — — — — —</b>\n\n"
     body = ""
     medals = ["👑 :", "💎 :", "💰 :", "💵 :", "💵 :", "💵 :", "💵 :", "💵 :", "💵 :", "💵 :"]
+    
     for i, user in enumerate(data):
-        rank_icon = medals[i]
-        name = user.get('user_name', 'مجهول'); money = user.get('wallet', 0)
-        inv = user.get('inventory', []); items = len(inv) if isinstance(inv, list) else 0
-        gifts = user.get('special_wins', 0); flag = user.get('country_flag', '🌐')
-        body += f"{rank_icon} <b>{name}</b> {flag}\n"
+        rank_icon = medals[i] if i < len(medals) else f"<b>{i+1} :</b>"
+        u_id = user.get('user_id')
+        name = user.get('user_name', 'مجهول')
+        
+        user_link = await get_user_link_protected(u_id, name)
+        
+        money = user.get('wallet', 0)
+        inv = user.get('inventory', [])
+        items = len(inv) if isinstance(inv, list) else 0
+        gifts = user.get('special_wins', 0)
+        flag = user.get('country_flag', '🌐')
+        
+        body += f"{rank_icon} {user_link} {flag}\n"
         body += f"    🔸 <b>: الرصيد :</b> <code>{money:,}</code> ن\n"
         body += f"    🔹 <b>: المقتنيات :</b> <code>{items}</code> | <b>الهدايا :</b> <code>{gifts}</code>\n\n"
     return header + body + "<b>— — — — — — — — — — — —</b>"
 
-def format_top_groups_list(data: list):
+async def format_top_groups_list(data: list):
     header = "<b>🏰 : تـرتـيـب أقـوى الـمـجـمـوعـات</b>\n"
     header += "<b>— — — — — — — — — — — —</b>\n\n"
     body = ""
     medals = ["🏛️ :", "🏟️ :", "🏤 :", "🏰 :", "🏰 :", "🏰 :", "🏰 :", "🏰 :", "🏰 :", "🏰 :"]
+    
     for i, group in enumerate(data):
-        rank_icon = medals[i]; g_name = group.get('group_name', 'مجموعة مجهولة')
-        pts = group.get('total_points', 0); top_m = group.get('top_member_name', 'لا يوجد')
+        rank_icon = medals[i] if i < len(medals) else f"<b>{i+1} :</b>"
+        g_name = group.get('group_name', 'مجموعة مجهولة')
+        pts = group.get('total_points', 0)
+        
+        # العضو الأبرز (حماية خصوصيته أيضاً)
+        top_m_name = group.get('top_member_name', 'لا يوجد')
+        top_m_id = group.get('top_member_id')
+        top_member_link = await get_user_link_protected(top_m_id, top_m_name) if top_m_id else top_m_name
+        
         m_count = group.get('members_count', 0)
+        
         body += f"{rank_icon} <b>{g_name}</b>\n"
         body += f"    🔸 <b>: إجمالي النقاط :</b> <code>{pts:,}</code> ن\n"
-        body += f"    🔹 <b>: العضو الأبرز :</b> <code>{top_m}</code>\n"
+        body += f"    🔹 <b>: العضو الأبرز :</b> {top_member_link}\n"
         body += f"    👥 <b>: عدد الأعضاء :</b> <code>{m_count}</code> عضواً\n\n"
     return header + body + "<b>— — — — — — — — — — — —</b>"
-
+    
 # ============================================================
 # 4. معالج العمليات (Callback Handler)
 # ============================================================
@@ -1413,13 +1452,13 @@ async def process_board_navigation(c: types.CallbackQuery):
     try:
         # 🟢 التعديل ليتوافق مع أسماء أعمدة جداول ياسر الجديدة
         if action == "top_wealth":
-            # نستخدم last_update بدلاً من updated_at
             res = supabase.table("users_global_profile") \
                 .select("*") \
                 .order("wallet", desc=True) \
                 .order("last_update", desc=True) \
                 .limit(20).execute()
-            text = format_top_wealth_list(res.data)
+            # ✅ أضفنا await هنا لأن الدالة أصبحت async
+            text = await format_top_wealth_list(res.data) 
 
         elif action == "top_iq":
             res = supabase.table("users_global_profile") \
@@ -1427,15 +1466,17 @@ async def process_board_navigation(c: types.CallbackQuery):
                 .order("iq_score", desc=True) \
                 .order("last_update", desc=True) \
                 .limit(20).execute()
-            text = format_top_iq_list(res.data)
+            # ✅ أضفنا await هنا أيضاً
+            text = await format_top_iq_list(res.data)
 
         elif action == "top_groups":
             res = supabase.table("groups_global_stats") \
                 .select("*") \
                 .order("total_points", desc=True) \
                 .limit(20).execute()
-            text = format_top_groups_list(res.data)
-
+            # ✅ أضفنا await هنا أيضاً
+            text = await format_top_groups_list(res.data)
+    
         # 🛡️ حماية إذا لم تكن هناك بيانات
         if not res.data or len(res.data) == 0:
             return await c.answer("⚠️ لا توجد بيانات مسجلة حالياً.", show_alert=True)
