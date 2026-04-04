@@ -271,158 +271,163 @@ def normalize_arabic(text):
     text = re.sub(r'[\u064B-\u0652]', '', text)
     return text
 
-# 2. بداية المغناطيس الملكي V3: محرك الاستنتاج
 async def get_ultra_smart_options(question_text, category_name, correct_ans):
     try:
         norm_correct = normalize_arabic(correct_ans)
-        norm_q = normalize_arabic(question_text)
         fakes = []
         seen_norms = {norm_correct}
+        
+        ans_words = correct_ans.split()
+        q_norm = normalize_arabic(question_text)
 
-        # --- [ قاموس الأنماط الدلالية الشامل ] ---
+        # 1️⃣ [ مصفوفة الموسوعة العالمية الشاملة - الإصدار النهائي المطلق 2026 ] 🌐
+        # تم تصميمها لامتصاص كل أنواع الأسئلة على وجه الأرض مع معالجة (هـ / ة)
         patterns = {
+            # --- التاريخ والزمن والحروب ---
             'history_war': [
                 'عام', 'سنه', 'سنة', 'تاريخ', 'قرن', 'ميلادي', 'هجري', 'معركه', 'معركة', 
                 'غزوه', 'غزوة', 'ثوره', 'ثورة', 'حضاره', 'حضارة', 'امبراطور', 'ملك', 'سلالة', 'عصر'
             ],
+            
+            # --- الجغرافيا والكون والطبيعة ---
             'geography_world': [
                 'دوله', 'دولة', 'بلد', 'عاصمه', 'عاصمة', 'مدينه', 'مدينة', 'نهر', 'بحر', 
-                'محيط', 'جبل', 'قاره', 'قارة', 'جزيره', 'جزيرة', 'خليج', 'مضيق', 'مناخ', 'تضاريس'
+                'محيط', 'جبل', 'قاره', 'قارة', 'جزيره', 'جزيرة', 'خليج', 'مضيق', 'مناخ', 'تضاريس', 'غابة'
             ],
+            
+            # --- العلوم والتقنية والطب (التشريح الدقيق) ---
             'science_tech': [
                 'كوكب', 'عنصر', 'غاز', 'حيوان', 'طائر', 'نبات', 'جسم', 'خليه', 'خلية', 
-                'جهاز', 'مخترع', 'اكتشف', 'فيزياء', 'كيمياء', 'مجره', 'مجرة', 'فضاء'
+                'جهاز', 'مخترع', 'اكتشف', 'فيزياء', 'كيمياء', 'مجره', 'مجرة', 'فضاء', 'تلسكوب', 'هندسة'
             ],
             'medical_health': [
                 'عضو', 'مرض', 'دواء', 'فيتامين', 'هرمون', 'عصب', 'عظم', 'دم', 'قلب', 
-                'دماغ', 'عضله', 'غده', 'فيروس', 'بكتيريا', 'علاج'
+                'دماغ', 'عضله', 'عضلة', 'غده', 'غدة', 'فيروس', 'بكتيريا', 'علاج'
             ],
+            
+            # --- الفكر والأدب والشخصيات ---
             'humanities': [
                 'من هو', 'الشاعر', 'مؤلف', 'كاتب', 'فنان', 'رسام', 'فيلسوف', 'رواية', 
-                'قصيدة', 'لوحة', 'تمثال', 'مسرحية', 'فكر', 'منطق'
+                'قصيدة', 'لوحة', 'تمثال', 'مسرحية', 'فكر', 'منطق', 'ثقافة'
             ],
             'islamic_religion': [
                 'سوره', 'سورة', 'آيه', 'آية', 'نبي', 'رسول', 'الصحابي', 'تابعي', 'فقيه', 
-                'كتاب', 'تفسير', 'حديث', 'صلاه', 'حج', 'زكاه'
+                'كتاب', 'تفسير', 'حديث', 'صلاه', 'صلاة', 'حج', 'زكاه', 'زكاة', 'غزوة'
             ],
+            
+            # --- الرياضة والترفيه والألعاب ---
             'sports_ent': [
-                'لاعب', 'نادي', 'منتخب', 'بطوله', 'كأس', 'هدف', 'اولمبياد', 'فيلم', 'مسلسل'
+                'لاعب', 'نادي', 'منتخب', 'بطوله', 'بطولة', 'كاس', 'كأس', 'ملعب', 'هدف', 
+                'اولمبياد', 'فيلم', 'مسلسل', 'ممثل', 'مخرج', 'اغنية', 'اغنيه', 'رقم قياسي'
             ],
+            
+            # --- الحساب والمنطق والقياسات ---
             'math_logic': [
-                'حساب', 'رياضيات', 'مربع', 'مثلث', 'زاويه', 'مجموع', 'ناتج', 'معادله', 'رقم'
+                'حساب', 'رياضيات', 'مربع', 'مثلث', 'زاويه', 'زاوية', 'مجموع', 'ناتج', 
+                'معادله', 'معادلة', 'رقم', 'ضعف', 'جذر', 'قسمة', 'ضرب'
             ],
             'measurements': [
-                'كم عدد', 'كم يبلغ', 'ما طول', 'ما وزن', 'نسبه', 'مسافه', 'الوحده', 'لقياس', 'سرعه'
+                'كم عدد', 'كم يبلغ', 'ما طول', 'ما وزن', 'نسبه', 'نسبة', 'مسافه', 'مسافة', 
+                'الوحده', 'الوحدة', 'لقياس', 'مادة', 'مادة', 'الزمن', 'الجهاز', 'سرعه', 'سرعة', 'درجه', 'درجة'
             ],
+            
+            # --- الاقتصاد، القانون، والسياسة ---
             'eco_law_pol': [
-                'عملة', 'بورصة', 'اقتصاد', 'شركة', 'قانون', 'محكمة', 'دستور', 'رئيس', 'وزير'
+                'عملة', 'عمله', 'بورصة', 'اقتصاد', 'شركة', 'شركه', 'قانون', 'محكمة', 
+                'دستور', 'رئيس', 'وزير', 'برلمان', 'انتخابات', 'سياسة'
             ],
+
+            # --- اللغة، الأمثال، الحياة اليومية ---
             'language_proverbs': [
-                'مرادف', 'ضد', 'معنى', 'جمع', 'مفرد', 'مثل', 'حكمه', 'كلمة', 'لغة'
+                'مرادف', 'ضد', 'معنى', 'جمع', 'مفرد', 'مثل', 'حكمه', 'حكمة', 'قائل', 
+                'كلمة', 'كلمه', 'لغة', 'لغه', 'لهجة', 'لهجه'
             ],
             'lifestyle_brands': [
-                'اكله', 'وجبه', 'مطبخ', 'فاكهه', 'سياره', 'ماركه', 'شعار', 'هاتف', 'برج'
+                'اكله', 'اكلة', 'وجبه', 'وجبة', 'مطبخ', 'فاكهه', 'فاكهة', 'خضار', 
+                'سياره', 'سيارة', 'ماركه', 'ماركة', 'شعار', 'هاتف', 'تطبيق', 'برج'
             ],
+            
+            # --- الأساطير والماورائيات ---
             'myth_folklore': [
-                'اسطورة', 'خرافة', 'اله', 'عملاق', 'تنين'
+                'اسطورة', 'اسطوره', 'خرافة', 'خرافه', 'اله', 'عملاق', 'تنين', 'فلكلور'
             ]
         }
-
-        # --- [ رادار الكشف عن "نوع" السؤال ] ---
+        
         detected_pattern = None
-        for p_name, keywords in patterns.items():
-            if any(k in norm_q for k in keywords):
-                detected_pattern = p_name
+        for key, words in patterns.items():
+            if any(w in q_norm for w in words):
+                detected_pattern = key
                 break
-                
-        # 3️⃣ [ تحليل هوية الإجابة الصحيحة ]
-        # 3️⃣ [ تحليل هوية الإجابة الصحيحة ]
-        is_date = True if (correct_ans.isdigit() and 1000 <= int(correct_ans) <= 2100) else False
-        is_numeric = any(char.isdigit() for char in correct_ans) and not is_date
-        ans_word_count = len(correct_ans.split())
 
-        # 🧠 [ الفكرة العبقرية 1: هندسة السراب المعكوس للتواريخ والأرقام ]
-        if is_date:
-            # إذا كان 1945 -> نولد 1954 (لخبطة بصرية) + أرقام قريبة
-            swapped_date = correct_ans[:-2] + correct_ans[-1] + correct_ans[-2] if len(correct_ans) == 4 else str(int(correct_ans) + 10)
-            numeric_fakes = list(set([swapped_date, str(int(correct_ans) + 5), str(int(correct_ans) - 10)]))
-            return [f for f in numeric_fakes if f != correct_ans][:3]
-
-        elif is_numeric and correct_ans.isdigit():
-            num = int(correct_ans)
-            step = max(1, int(num * 0.15)) # نسبة تفاوت 15%
-            numeric_fakes = [str(num + step), str(abs(num - step)), str(num + (step * 2))]
-            random.shuffle(numeric_fakes)
-            return numeric_fakes
-
-        import asyncio
-        query = supabase.table("bot_questions").select("correct_answer", "question_content")
-
-        # 4️⃣ [ استراتيجية الغوص الطبقي الموازي (الصاروخي) ]
-        potential_res = []
-        
+        # 2️⃣ نظام الصيد بالليزر (Strict Type Logic)
         if detected_pattern:
-            search_k = random.choice(patterns[detected_pattern])
-            # ✅ تغليف سوبابيس لمنع اختناق البوت
-            res_p = await asyncio.to_thread(query.ilike("question_content", f"%{search_k}%").limit(60).execute)
-            if res_p.data: potential_res.extend(res_p.data)
-
-        if not potential_res:
-            q_words = [w for w in question_text.split() if len(w) > 3]
-            if q_words:
-                core_w = normalize_arabic(q_words[-1])
-                # ✅ تغليف سوبابيس هنا أيضاً
-                res_c = await asyncio.to_thread(query.ilike("question_content", f"%{core_w}%").limit(30).execute)
-                if res_c.data: potential_res.extend(res_c.data)
-
-        # 5️⃣ [ الفلترة المنطقية (مصفاة أثير الاحترافية) ]
-        random.shuffle(potential_res)
-        
-        for r in potential_res:
-            opt = str(r['correct_answer']).strip()
-            opt_norm = normalize_arabic(opt)
+            search_keywords = patterns[detected_pattern]
+            # ذكاء اصطناعي مصغر: استخراج الكلمة النوعية مع إزالة الـ التعريف
+            specific_type = next((w for w in search_keywords if w in q_norm), None)
             
-            if opt_norm not in seen_norms:
-                if is_numeric and not any(c.isdigit() for c in opt): continue
-                if not is_numeric and any(c.isdigit() for c in opt): continue
+            query = supabase.table("bot_questions").select("correct_answer")
+            
+            if specific_type:
+                # إزالة "ال" التعريف للبحث الشامل
+                clean_type = re.sub(r'^ال', '', specific_type)
+                res = query.ilike("question_content", f"%{clean_type}%").limit(60).execute()
+            else:
+                or_filter = ",".join([f"question_content.ilike.%{w}%" for w in search_keywords])
+                res = query.or_(or_filter).limit(60).execute()
+            
+            if res.data:
+                for r in res.data:
+                    opt = str(r['correct_answer']).strip()
+                    if normalize_arabic(opt) not in seen_norms:
+                        # حماية الأرقام
+                        if any(char.isdigit() for char in correct_ans) and not any(char.isdigit() for char in opt):
+                            continue
+                        # تناسق الطول
+                        if abs(len(opt) - len(correct_ans)) <= 12:
+                            fakes.append(opt)
+                            seen_norms.add(normalize_arabic(opt))
                 
-                # السماح بمرونة بسيطة في الطول لعدم تضييق الخيارات تماماً
-                if abs(len(opt.split()) - ans_word_count) <= 2:
-                    fakes.append(opt)
-                    seen_norms.add(opt_norm)
-                
-                if len(fakes) >= 6: break
+                if len(fakes) >= 3: 
+                    return random.sample(fakes, 3)
 
-        # 🧬 [ الفكرة العبقرية 2: خلايا الـ DNA لإنقاذ السيرفر (صفر استهلاك) ]
-        # بدلاً من إرسال طلب ثالث مرهق لـ سوبابيس إذا فشلنا، نسحب من درع الطوارئ
+        # 3️⃣ نظام "الكلمة الأولى" (البحث عن نفس العائلة اللفظية)
+        if len(ans_words) >= 1:
+            first_word = re.sub(r'^ال', '', ans_words[0]) # إزالة ال التعريف من الإجابة أيضاً
+            if len(first_word) > 2:
+                res = supabase.table("bot_questions").select("correct_answer") \
+                    .ilike("correct_answer", f"%{first_word}%") \
+                    .limit(20).execute()
+                
+                for r in res.data:
+                    opt = str(r['correct_answer']).strip()
+                    if normalize_arabic(opt) not in seen_norms:
+                        fakes.append(opt)
+                        seen_norms.add(normalize_arabic(opt))
+                
+                if len(fakes) >= 3: return random.sample(fakes, 3)
+
+        # 4️⃣ نظام "التطابق الشكلي" (لضمان وجود خيارات دائماً)
         if len(fakes) < 3:
-            emergency_dna = {
-                'geography_world': ['مصر', 'سوريا', 'باريس', 'لندن', 'آسيا', 'أفريقيا', 'النيل'],
-                'history_war': ['الحرب العالمية', 'الدولة العثمانية', 'الرومان', 'الفرس', 'العباسيين'],
-                'science_tech': ['الاكسجين', 'الهيدروجين', 'الجاذبية', 'الخلية', 'نيوتن', 'اينشتاين'],
-                'sports_ent': ['برشلونة', 'ريال مدريد', 'البرازيل', 'الارجنتين', 'ميسي', 'كريستيانو']
-            }
-            # إذا عرفنا النمط نأخذ منه، وإلا نأخذ خيارات منطقية عامة متوافقة مع طول الإجابة
-            dna_pool = emergency_dna.get(detected_pattern, ['جميع ما سبق', 'غير معروف', 'لا شيء مما ذكر'])
+            # زيادة البحث في القسم ليشمل خيارات أكثر
+            res = supabase.table("bot_questions").select("correct_answer") \
+                .eq("category", category_name).limit(50).execute()
             
-            for dna_opt in dna_pool:
-                if normalize_arabic(dna_opt) not in seen_norms and not is_numeric:
-                    fakes.append(dna_opt)
-                    seen_norms.add(normalize_arabic(dna_opt))
-                if len(fakes) >= 3: break
+            for r in res.data:
+                opt = str(r['correct_answer']).strip()
+                if normalize_arabic(opt) not in seen_norms:
+                    # تفضيل نفس عدد الكلمات
+                    if len(opt.split()) == len(ans_words):
+                        fakes.append(opt)
+                        seen_norms.add(normalize_arabic(opt))
 
-        # 7️⃣ [ النتيجة النهائية: التمويه القاتل ]
-        # إضافة درع أخير لحماية أزرار التليجرام من الخطأ (يجب أن ترجع الدالة دائماً خيارات)
-        while len(fakes) < 3:
-            fakes.append(f"خيار بديل {random.randint(100,999)}")
-
-        return random.sample(fakes, 3)
+        # 5️⃣ التغطية النهائية (Fallback Safe)
+        # نستخدم min لضمان عدم حدوث خطأ إذا كانت القائمة صغيرة
+        return random.sample(fakes, min(len(fakes), 3))
 
     except Exception as e:
-        print(f"❌ خطأ في المغناطيس الملكي V3: {e}")
-        # درع الطوارئ الحاسم لعدم تعطل اللعبة
-        return ["إجابة تمويهية أ", "إجابة تمويهية ب", "إجابة تمويهية ج"]
-        
+        print(f"❌ خطأ في المحرك الموسوعي: {e}")
+        return []
+      
 # ==========================================
 # --- [ 2. بداية الدوال المساعدة قالب الاجابات  ] ---
 # ==========================================
