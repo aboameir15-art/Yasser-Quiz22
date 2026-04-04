@@ -2578,7 +2578,7 @@ def get_market_keyboard(user_id):
         InlineKeyboardButton("📈 الأكثر ربحاً", callback_data=f"market_tab:{user_id}:gainers"),
         InlineKeyboardButton("📉 الأكثر خسارة", callback_data=f"market_tab:{user_id}:losers")
     )
-    markup.add(InlineKeyboardButton("🏦 محفظتي", callback_data=f"wallet_view:{user_id}"))
+    markup.add(InlineKeyboardButton("🏦 محفظتي", callback_data=f"listener_wallet:{user_id}"))
     markup.add(InlineKeyboardButton("📋 صفقاتي المفتوحة", callback_data=f"active_trades_view:{user_id}"))
     return markup
 
@@ -2891,7 +2891,7 @@ async def get_user_bank_card(message: types.Message):
 # ==========================================
 # 2️⃣ المعالج الرئيسي للأوامر (عني، رتبتي، إلخ)
 # ==========================================
-@dp.message_handler(lambda m: m.text in ["عني", "رتبتي", "نقاطي", "محفظتي", "بروفايلي"])
+@dp.message_handler(lambda m: m.text in ["عني", "رتبتي", "نقاطي", "ملفي", "بروفايلي"])
 @dp.message_handler(lambda m: m.reply_to_message and m.text in ["عنه", "رتبته", "نقاطه", "محفظته", "بروفايله"])
 async def cmd_show_profile_global(message: types.Message):
     # 1. تحديد الهدف (أنا أو الشخص الذي تم الرد عليه)
