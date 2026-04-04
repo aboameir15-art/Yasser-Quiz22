@@ -2767,7 +2767,7 @@ async def close_trade_manually(trade_id, current_price):
     return True, pnl_amount
     
 
-async defupdate_trade_ui(callback_query):
+async def update_trade_ui(callback_query):
     """دالة مساعدة لتحديث شاشة إعداد الصفقة بناءً على الجلسة"""
     user_id = callback_query.from_user.id
     session = trade_sessions[user_id]
