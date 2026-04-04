@@ -4621,14 +4621,18 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 logging.error(f"❌ فشل تحديث جدول active_quizzes: {e}")
 
         
-        # --- [ نظام التلميح العادي المنفصل ] ---
+        # --- [ 1: تجهيز التلميح لقالب السؤال فقط ] ---
         normal_hint_str = ""
-        if quiz_data.get('smart_hint'):
+        # شرط صارم: التلميح لا يظهر إذا كان النمط "اختيارات 📊"
+        is_choices = quiz_data.get('quiz_style') == 'اختيارات 📊'
+        
+        # توليد التلميح ليتم حقنه داخل قالب السؤال
+        if quiz_data.get('smart_hint') and not is_choices:
             ans_str = str(ans).strip()
-            count_words = len(ans_str.split())
-            normal_hint_str = f"مكونة من ({count_words}) كلمات، تبدأ بـ ( {ans_str[0]} )"
+            # استدعاء المحرك الاحترافي (أثير V6)
+            normal_hint_str = get_pro_hint(ans_str)
 
-        # 3️⃣ [ استدعاء المايسترو بستايل @QuizBot ]
+        # 3️⃣ [ استدعاء المايسترو - التلميح محقون داخلياً ]
         q_msg = await send_quiz_master(
             chat_id, 
             q, 
@@ -4641,37 +4645,26 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
                 'time_limit': quiz_data['time_limit'], 
                 'cat_name': cat_name,
                 'quiz_style': quiz_data.get('quiz_style', 'اختيارات 📊'),
-                'smart_hint': quiz_data.get('smart_hint'),
-                'normal_hint': normal_hint_str 
+                'smart_hint': quiz_data.get('smart_hint') if not is_choices else False,
+                'normal_hint': normal_hint_str # هذا سيظهر داخل رسالة السؤال فقط
             }, 
             questions 
         )
         
         if isinstance(q_msg, types.Message):
             questions_to_delete.append(q_msg.message_id)
-            # تخزين معرف الرسالة في الرادار لاستخدامه في الإغلاق
             active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id
         
-        # 4️⃣ مراقبة الوقت والتلميح
+        # 4️⃣ مراقبة الوقت (بدون إرسال رسائل تلميح خارجية)
         start_time = time.time()
         t_limit = int(quiz_data.get('time_limit', 15))
-        h_msg = None 
-        current_q_text = q.get('question_content') or q.get('question_text') or "سؤال غامض"
 
         while time.time() - start_time < t_limit:
+            # هنا نراقب فقط انتهاء الوقت أو توقف المسابقة
             if not active_quizzes.get(chat_id) or not active_quizzes[chat_id]['active']:
                 break
             
-            if quiz_data.get('smart_hint') and not active_quizzes[chat_id]['hint_sent']:
-                if (time.time() - start_time) >= (t_limit / 2):
-                    try:
-                        hint_text = await generate_smart_hint(answer_text=ans, question_text=current_q_text)
-                        h_msg = await bot.send_message(chat_id, hint_text, parse_mode="HTML")
-                        active_quizzes[chat_id]['hint_sent'] = True
-                    except Exception as e:
-                        logging.error(f"⚠️ خطأ في التلميح: {e}")
-
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
 
         # 🛑 [ حماية @QuizBot: إغلاق الاستطلاع فوراً ومنع الإجابات المتأخرة ]
         if chat_id in active_quizzes:
