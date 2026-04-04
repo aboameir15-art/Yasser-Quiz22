@@ -4656,14 +4656,17 @@ async def run_universal_logic(chat_id, questions, quiz_data, owner_name, engine_
             active_quizzes[chat_id]['last_poll_id'] = q_msg.message_id
         
         # 4️⃣ مراقبة الوقت (بدون إرسال رسائل تلميح خارجية)
+        # 4️⃣ مراقبة الوقت والتلميح
         start_time = time.time()
         t_limit = int(quiz_data.get('time_limit', 15))
-
+        
+        # --- [ الحل هنا: تعريف المتغير لتجنب خطأ name not defined ] ---
+        h_msg = None 
+        
         while time.time() - start_time < t_limit:
-            # هنا نراقب فقط انتهاء الوقت أو توقف المسابقة
             if not active_quizzes.get(chat_id) or not active_quizzes[chat_id]['active']:
                 break
-            
+  
             await asyncio.sleep(0.1)
 
         # 🛑 [ حماية @QuizBot: إغلاق الاستطلاع فوراً ومنع الإجابات المتأخرة ]
