@@ -89,15 +89,53 @@ async def safe_database_cleaner():
 # ==========================================
 # 4. محركات العرض والقوالب (Display Engines) - النسخة المصلحة
 # ==========================================
-# [3] دالة قالب السؤال (المصلحة)
+# --- [ الدوال المحركة للتلميحات الاحترافية ] ---
+def template_cyber_pulse(ans):
+    reveal_count = max(1, int(len(ans.replace(" ","")) * 0.2))
+    indices = [i for i, c in enumerate(ans) if c != " "]
+    to_reveal = random.sample(indices, min(len(indices), reveal_count))
+    res = "".join([ans[i] if i in to_reveal else "▢" for i in range(len(ans))])
+    return f"⚡️ **تشفير النبض:**\n🔓 ` {res} `\n💡 الحروف تتغير عند كل محاولة.. ركز!"
+
+def template_toxic_scramble(ans):
+    extra_chars = ["أ", "و", "ي", "م", "ن", "ر", "س"]
+    letters = list(ans.replace(" ", ""))
+    letters.extend(random.sample(extra_chars, 3))
+    random.shuffle(letters)
+    return f"☣️ **حروف مفخخة:**\n👉 ` {' . '.join(letters)} `\n🎯 استبعد الفخاخ واستخرج الإجابة!"
+
+def template_matrix_structure(ans):
+    words = ans.split()
+    structure = " + ".join([f"[{len(w)}]" for w in words])
+    first_chars = " - ".join([w[0] for w in words])
+    return f"📟 **هيكل المصفوفة:**\n📏 نمط الكلمات: ` {structure} `\n🔑 مفاتيح البداية: ` {first_chars} `"
+
+def template_visual_stealth(ans):
+    res = []
+    for char in ans:
+        if char == " ": res.append("  ")
+        elif len(char.encode('utf-8')) > 1:
+             res.append("•" if random.random() > 0.5 else "—")
+    final_hint = ans[0] + "".join(res[1:])
+    return f"🌑 **تلميح الظل:**\n👤 ` {final_hint} `\n🔍 املأ الفراغات بناءً على الإيقاع."
+
+def get_pro_hint(answer):
+    ans_str = str(answer).strip()
+    if len(ans_str.split()) > 1:
+        return random.choice([template_matrix_structure(ans_str), template_cyber_pulse(ans_str)])
+    else:
+        return random.choice([template_toxic_scramble(ans_str), template_visual_stealth(ans_str)])
+
+# --- [ محرك العرض المحدث (Display Engine) ] ---
+
 async def send_quiz_question(chat_id, q_data, current_num, total_num, settings):
     is_pub = settings.get('is_public', False) 
     q_scope = "إذاعة عامة 🌐" if is_pub else "مسابقة داخلية 📍"
     q_mode = settings.get('mode', 'السرعة ⚡')
-    is_hint_on = settings.get('smart_hint', False) # الزر المفعل قبل الحفظ
+    is_hint_on = settings.get('smart_hint', False)
     
-    # استخراج التلميح العادي (البنيوي)
-    normal_hint = settings.get('normal_hint', "")
+    # استخراج الإجابة الصحيحة لتوليد التلميح منها
+    answer = q_data.get('correct_answer') or q_data.get('answer_text')
 
     if q_data.get('bot_category_id'):
         real_source = "أسئلة البوت 🤖"
@@ -108,26 +146,30 @@ async def send_quiz_question(chat_id, q_data, current_num, total_num, settings):
 
     q_text = q_data.get('question_content') or q_data.get('question_text') or "⚠️ نص السؤال مفقود!"
     
+    # بناء نص السؤال الأساسي
     text = (
         f"🎓 **الـمنـظـم:** {settings['owner_name']} ☁️\n"
-        f"  ❃┅┅┅┄┄┄┈•❃•┈┄┄┄┅┅┅❃\n"
+        f"    ❃┅┅┅┄┄┄┈•❃•┈┄┄┄┅┅┅❃\n"
         f"📌 **السؤال:** « {current_num} » من « {total_num} »\n"
         f"📂 **القسم:** `{settings['cat_name']}`\n"
         f"🛠 **المصدر:** `{real_source}`\n"
         f"📡 **النطاق:** **{q_scope}**\n"
         f"🔖 **النظام:** {q_mode}\n"
         f"⏳ **المهلة:** {settings['time_limit']} ثانية\n"
-        f"  ❃┅┅┅┄┄┄┈•❃•┈┄┄┄┅┅┅❃\n\n"
+        f"    ❃┅┅┅┄┄┄┈•❃•┈┄┄┄┅┅┅❃\n\n"
         f"❓ **السؤال:**\n**{q_text}**\n"
     )
     
-    # عرض التلميح العادي فقط إذا كان الزر مفعلاً
-    if is_hint_on and normal_hint:
-        text += f"\n💡 **تلميح الإجابة:** {normal_hint}"
+    # نظام التلميحات المطور (أثير V6)
+    if is_hint_on and answer:
+        pro_hint = get_pro_hint(answer)
+        text += f"\n    ❃┅┅┅┄┄┄┈•❃•┈┄┄┄┅┅┅❃\n"
+        text += f"{pro_hint}"
 
     try:
         return await bot.send_message(chat_id, text, parse_mode='Markdown')
     except Exception as e:
+        # نسخة نصية بسيطة في حال فشل الماركداون
         clean_text = text.replace("*", "").replace("`", "").replace("_", "")
         return await bot.send_message(chat_id, clean_text)
 # ==========================================
