@@ -2438,8 +2438,8 @@ async def get_user_bank_card(message: types.Message):
 # ==========================================
 # 2️⃣ المعالج الرئيسي للأوامر (عني، رتبتي، إلخ)
 # ==========================================
-@dp.message_handler(lambda m: m.text in ["عني", "رتبتي", "نقاطي", "محفظتي", "بروفايلي"])
-@dp.message_handler(lambda m: m.reply_to_message and m.text in ["عنه", "رتبته", "نقاطه", "محفظته", "بروفايله"])
+@dp.message_handler(lambda m: m.text in ["عني", "رتبتي", "نقاطي", "ملفي", "بروفايلي"])
+@dp.message_handler(lambda m: m.reply_to_message and m.text in ["عنه", "رتبته", "نقاطه", "ملفه", "بروفايله"])
 async def cmd_show_profile_global(message: types.Message):
     # 1. تحديد الهدف (أنا أو الشخص الذي تم الرد عليه)
     target = message.reply_to_message.from_user if message.reply_to_message else message.from_user
